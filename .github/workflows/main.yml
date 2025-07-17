@@ -20,4 +20,4 @@ jobs:
           server: ftp.linosgopro.com
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: /public_html/odoo-bot/
+          server-dir: /home/linoxrfm/odoo-bot-api
