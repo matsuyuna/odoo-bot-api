@@ -13,12 +13,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Upload via SCP
-        uses: appleboy/scp-action@v0.1.7
+      - name: Deploy to FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           host: ${{ secrets.SFTP_HOST }}
           username: ${{ secrets.SFTP_USERNAME }}
           password: ${{ secrets.SFTP_PASSWORD }}
-          port: 22
-          source: "./" # o solo tu carpeta `public` si solo quieres eso
-          target: "/home/linoxrfm/linosgopro.com/odoo-bot-api/" # o donde vayas a subirlo
+          port: 21
+          server-dir: "/home/linoxrfm/linosgopro.com/odoo-bot-api/"
