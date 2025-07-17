@@ -34,5 +34,11 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'odoo' => [
+        'url' => env('ODOO_URL', 'https://tuservidorodoo.com/jsonrpc'),
+        'db' => env('ODOO_DB', 'nombre_de_tu_base'),
+        'username' => env('ODOO_USERNAME', 'usuario@correo.com'),
+        'password' => env('ODOO_PASSWORD', 'tu_contraseña'),
+    ],
 
 ];
