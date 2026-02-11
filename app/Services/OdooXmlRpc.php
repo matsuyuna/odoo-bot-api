@@ -171,12 +171,13 @@ class OdooXmlRpc
     }
 
     /**
-     * Trae contactos recientes de Odoo para procesos de sincronización.
+     * Trae un lote paginado de contactos recientes de Odoo para sincronización.
      */
-    public function fetchRecentContacts(int $limit = 200): array
+    public function fetchRecentContacts(int $limit = 500, int $offset = 0): array
     {
         $uid = $this->getUid();
-        $limit = max(1, min($limit, 500));
+        $limit = max(1, min($limit, 1000));
+        $offset = max(0, $offset);
 
         $domain = [
             ['active', '=', true],
@@ -195,7 +196,9 @@ class OdooXmlRpc
             [
                 'fields' => ['id', 'name', 'email', 'phone', 'mobile', 'vat', 'is_company', 'write_date', 'create_date'],
                 'limit' => $limit,
-                'order' => 'write_date desc, id desc',
+                'offset' => $offset,
+                // Orden estable para paginación con offset
+                'order' => 'id asc',
             ],
         ]);
 

@@ -8,5 +8,5 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('odoo:contacts:pull --limit=300')->everyFiveMinutes();
+Schedule::command('odoo:contacts:pull --batch-size=500 --max-total=0')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('wati:contacts:push --limit=150')->everyFiveMinutes()->withoutOverlapping();
