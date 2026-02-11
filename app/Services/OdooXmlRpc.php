@@ -111,6 +111,103 @@ class OdooXmlRpc
         return $out;
     }
 
+    /**
+     * Busca contactos en Odoo (res.partner) por nombre/email/teléfono.
+     * Si no hay query, retorna una lista reciente de contactos activos.
+     */
+    public function searchContactsSmart(string $query = '', int $limit = 50): array
+    {
+        $uid = $this->getUid();
+        $limit = max(1, min($limit, 200));
+
+        $domain = [['active', '=', true]];
+        $query = trim($query);
+
+        if ($query !== '') {
+            $domain = [
+                ['active', '=', true],
+                '|', '|',
+                ['name', 'ilike', $query],
+                ['email', 'ilike', $query],
+                ['phone', 'ilike', $query],
+            ];
+        }
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            'res.partner',
+            'search_read',
+            [$domain],
+            [
+                'fields' => ['id', 'name', 'email', 'phone', 'mobile', 'vat', 'is_company'],
+                'limit' => $limit,
+                'order' => 'write_date desc',
+            ],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+        $rows = is_array($parsed) ? $parsed : [];
+
+        $out = [];
+        foreach ($rows as $r) {
+            $phone = $r['mobile'] ?? $r['phone'] ?? null;
+            $out[] = [
+                'id' => $r['id'] ?? null,
+                'name' => $r['name'] ?? null,
+                'email' => $r['email'] ?? null,
+                'phone' => $r['phone'] ?? null,
+                'mobile' => $r['mobile'] ?? null,
+                'vat' => $r['vat'] ?? null,
+                'is_company' => $r['is_company'] ?? false,
+                // campo útil para luego mapear a WATI
+                'preferred_whatsapp' => $phone,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Trae un lote paginado de contactos recientes de Odoo para sincronización.
+     */
+    public function fetchRecentContacts(int $limit = 500, int $offset = 0): array
+    {
+        $uid = $this->getUid();
+        $limit = max(1, min($limit, 1000));
+        $offset = max(0, $offset);
+
+        $domain = [
+            ['active', '=', true],
+            '|',
+            ['phone', '!=', false],
+            ['mobile', '!=', false],
+        ];
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            'res.partner',
+            'search_read',
+            [$domain],
+            [
+                'fields' => ['id', 'name', 'email', 'phone', 'mobile', 'vat', 'is_company', 'write_date', 'create_date'],
+                'limit' => $limit,
+                'offset' => $offset,
+                // Orden estable para paginación con offset
+                'order' => 'id asc',
+            ],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+
+        return is_array($parsed) ? $parsed : [];
+    }
+
     /** name_search(model, name, operator=ilike, limit=N) -> [[id,"Display Name"], ...] */
     private function nameSearch(string $model, string $term, int $limit = 40): array
     {
