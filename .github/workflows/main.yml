@@ -60,6 +60,10 @@ jobs:
             fi
           done
 
+
+          # FTP-Deploy-Action exige que server-dir termine en '/'.
+          DEPLOY_SERVER_DIR="${DEPLOY_SERVER_DIR%/}/"
+
           case "$DEPLOY_PROTOCOL" in
             ftp|ftps|ftps-legacy) ;;
             *)

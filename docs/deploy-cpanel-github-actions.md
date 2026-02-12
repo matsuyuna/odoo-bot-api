@@ -24,6 +24,8 @@ Opcionales:
 
 Compatibilidad: si ya usabas `SFTP_*`, el workflow también los acepta como fallback.
 
+Tip: si `FTP_SERVER_DIR` viene sin slash final, el workflow lo normaliza automáticamente para que termine en `/`.
+
 ## 1.1) ¿Me los puedes crear tú los secrets?
 
 Sí, te lo puedo dejar automatizado, pero por seguridad **debe hacerse con tu sesión de GitHub**.
