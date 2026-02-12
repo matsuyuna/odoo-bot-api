@@ -28,30 +28,53 @@ jobs:
       - name: Build production dependencies
         run: composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 
-      - name: Validate required secrets
+      - name: Resolve deploy secrets (SFTP_* preferred)
         env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_SERVER_DIR: ${{ secrets.SFTP_SERVER_DIR }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          FTP_PROTOCOL: ${{ secrets.FTP_PROTOCOL }}
         run: |
-          set -e
-          for secret_name in FTP_SERVER FTP_USERNAME FTP_PASSWORD FTP_SERVER_DIR; do
-            if [ -z "${!secret_name}" ]; then
-              echo "Missing required secret: $secret_name"
+          set -euo pipefail
+
+          DEPLOY_SERVER="${SFTP_HOST:-${FTP_SERVER:-}}"
+          DEPLOY_USERNAME="${SFTP_USERNAME:-${FTP_USERNAME:-}}"
+          DEPLOY_PASSWORD="${SFTP_PASSWORD:-${FTP_PASSWORD:-}}"
+          DEPLOY_SERVER_DIR="${SFTP_SERVER_DIR:-${FTP_SERVER_DIR:-}}"
+          DEPLOY_PORT="${SFTP_PORT:-${FTP_PORT:-21}}"
+          DEPLOY_PROTOCOL="${FTP_PROTOCOL:-sftp}"
+
+          for key in DEPLOY_SERVER DEPLOY_USERNAME DEPLOY_PASSWORD DEPLOY_SERVER_DIR; do
+            if [ -z "${!key}" ]; then
+              echo "Missing required secret value for $key"
+              echo "Expected SFTP_* (preferred) or FTP_* equivalent."
               exit 1
             fi
           done
 
-      - name: Deploy to cPanel (FTP/FTPS)
+          echo "DEPLOY_SERVER=$DEPLOY_SERVER" >> "$GITHUB_ENV"
+          echo "DEPLOY_USERNAME=$DEPLOY_USERNAME" >> "$GITHUB_ENV"
+          echo "DEPLOY_PASSWORD=$DEPLOY_PASSWORD" >> "$GITHUB_ENV"
+          echo "DEPLOY_SERVER_DIR=$DEPLOY_SERVER_DIR" >> "$GITHUB_ENV"
+          echo "DEPLOY_PORT=$DEPLOY_PORT" >> "$GITHUB_ENV"
+          echo "DEPLOY_PROTOCOL=$DEPLOY_PROTOCOL" >> "$GITHUB_ENV"
+
+      - name: Deploy to cPanel (SFTP/FTP/FTPS)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: ${{ secrets.FTP_PORT || 21 }}
-          protocol: ${{ secrets.FTP_PROTOCOL || 'ftps' }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          server: ${{ env.DEPLOY_SERVER }}
+          username: ${{ env.DEPLOY_USERNAME }}
+          password: ${{ env.DEPLOY_PASSWORD }}
+          port: ${{ env.DEPLOY_PORT }}
+          protocol: ${{ env.DEPLOY_PROTOCOL }}
+          server-dir: ${{ env.DEPLOY_SERVER_DIR }}
           exclude: |
             **/.git*
             **/.git*/**
