@@ -208,6 +208,97 @@ class OdooXmlRpc
         return is_array($parsed) ? $parsed : [];
     }
 
+    
+
+    public function findContactIdByPhoneOrEmail(?string $phone, ?string $email): ?int
+    {
+        $uid = $this->getUid();
+
+        $phone = is_string($phone) ? trim($phone) : null;
+        $email = is_string($email) ? trim($email) : null;
+
+        if (!$phone && !$email) {
+            return null;
+        }
+
+        $domain = [['active', '=', true]];
+
+        if ($phone && $email) {
+            $domain = [
+                ['active', '=', true],
+                '|', '|',
+                ['phone', '=', $phone],
+                ['mobile', '=', $phone],
+                ['email', '=', $email],
+            ];
+        } elseif ($phone) {
+            $domain = [
+                ['active', '=', true],
+                '|',
+                ['phone', '=', $phone],
+                ['mobile', '=', $phone],
+            ];
+        } elseif ($email) {
+            $domain = [
+                ['active', '=', true],
+                ['email', '=', $email],
+            ];
+        }
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            'res.partner',
+            'search',
+            [$domain],
+            [
+                'limit' => 1,
+                'order' => 'id asc',
+            ],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+
+        if (is_array($parsed) && isset($parsed[0]) && is_int($parsed[0])) {
+            return $parsed[0];
+        }
+
+        return null;
+    }
+
+    public function createContact(array $values): int
+    {
+        $uid = $this->getUid();
+
+        $payload = [
+            'name' => (string) ($values['name'] ?? 'Sin nombre'),
+            'email' => $values['email'] ?? null,
+            'phone' => $values['phone'] ?? null,
+            'mobile' => $values['mobile'] ?? null,
+            'customer_rank' => 1,
+        ];
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            'res.partner',
+            'create',
+            [$payload],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+
+        if (!is_int($parsed) || $parsed <= 0) {
+            throw new RuntimeException('Odoo no devolvió un ID válido al crear contacto.');
+        }
+
+        return $parsed;
+    }
+
     /** name_search(model, name, operator=ilike, limit=N) -> [[id,"Display Name"], ...] */
     private function nameSearch(string $model, string $term, int $limit = 40): array
     {

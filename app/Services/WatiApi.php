@@ -94,4 +94,48 @@ class WatiApi
             'body' => $res->json() ?? $res->body(),
         ];
     }
+
+
+    public function getContacts(int $pageSize = 100, int $pageNumber = 1): array
+    {
+        $url = sprintf(
+            '%s/%s/api/v1/getContacts',
+            $this->baseUrl,
+            $this->tenantId,
+        );
+
+        $res = Http::timeout(20)
+            ->retry(2, 300)
+            ->withHeaders([
+                'Authorization' => 'Bearer ' . $this->token,
+                'accept' => 'application/json',
+            ])
+            ->get($url, [
+                'pageSize' => max(1, min($pageSize, 500)),
+                'pageNumber' => max(1, $pageNumber),
+            ]);
+
+        if (!$res->successful()) {
+            throw new RuntimeException('Error en WATI (' . $res->status() . '): ' . substr($res->body(), 0, 300));
+        }
+
+        $payload = $res->json();
+
+        if (!is_array($payload)) {
+            return ['contacts' => [], 'has_more' => false, 'raw' => $res->body()];
+        }
+
+        $contacts = $payload['contacts'] ?? $payload['result'] ?? $payload['data'] ?? [];
+        if (!is_array($contacts)) {
+            $contacts = [];
+        }
+
+        $hasMore = (bool) ($payload['hasMore'] ?? $payload['has_more'] ?? false);
+
+        return [
+            'contacts' => array_values(array_filter($contacts, fn ($item) => is_array($item))),
+            'has_more' => $hasMore,
+            'raw' => $payload,
+        ];
+    }
 }
