@@ -105,3 +105,25 @@ Si quieres esta variante, te configuro un workflow por SSH (más confiable que F
 - Firewall del hosting bloqueando IPs.
 - `.env` ausente o con `APP_KEY` inválida.
 - Permisos en `storage/` y `bootstrap/cache/`.
+
+
+## 6) ¿Qué significa `AggregateError [ETIMEDOUT] (control socket)`?
+
+Ese error significa que **GitHub Actions no logró abrir conexión TCP** al servidor/puerto FTP configurado.
+No suele ser usuario/password: normalmente falla **antes** de autenticarse.
+
+Cuando en el log aparecen IPs como `104.*`, `172.67.*` o `2606:4700:*`, casi siempre estás pegándole a **Cloudflare** (dominio proxied) y no al servidor FTP real.
+
+Solución típica en Namecheap/cPanel:
+
+1. En `FTP_SERVER` usa el hostname real del hosting en cPanel (ej. `serverXXX.web-hosting.com`), no el dominio principal si está detrás de Cloudflare.
+2. Verifica `FTP_PORT` y `FTP_PROTOCOL` (normalmente `21` + `ftps`).
+3. Prueba conexión desde tu máquina:
+
+```bash
+nc -vz TU_FTP_SERVER 21
+```
+
+Si ese comando no conecta, el problema es red/host/puerto/firewall del servidor (no del workflow).
+
+> Nota: `SamKirkland/FTP-Deploy-Action` soporta `ftp/ftps`, pero **no** `sftp` (SSH).

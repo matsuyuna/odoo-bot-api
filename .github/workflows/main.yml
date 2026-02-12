@@ -80,6 +80,26 @@ jobs:
           echo "DEPLOY_PORT=$DEPLOY_PORT" >> "$GITHUB_ENV"
           echo "DEPLOY_PROTOCOL=$DEPLOY_PROTOCOL" >> "$GITHUB_ENV"
 
+
+      - name: Preflight FTP connectivity check
+        run: |
+          set -euo pipefail
+
+          echo "Checking TCP connectivity to ${DEPLOY_SERVER}:${DEPLOY_PORT} ..."
+
+          if ! timeout 15 nc -vz "$DEPLOY_SERVER" "$DEPLOY_PORT"; then
+            echo ""
+            echo "Could not open control socket to ${DEPLOY_SERVER}:${DEPLOY_PORT}."
+            echo "This is usually a network/host/protocol issue (not credentials)."
+            echo ""
+            echo "Common fixes for Namecheap/cPanel:"
+            echo "- Use the real cPanel/hosting hostname in FTP_SERVER (serverXXX.web-hosting.com), not a proxied domain."
+            echo "- If DNS resolves to Cloudflare IPs (104.x / 172.67.x / 2606:4700:*), FTP/FTPS will time out."
+            echo "- Verify FTP_PORT and FTP_PROTOCOL match your hosting panel (usually 21 + ftps)."
+            echo "- If your host only supports SFTP/SSH, this action will not work; use an SFTP/SSH deploy action instead."
+            exit 1
+          fi
+
       - name: Deploy to cPanel (FTP/FTPS)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
