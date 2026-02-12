@@ -126,4 +126,14 @@ nc -vz TU_FTP_SERVER 21
 
 Si ese comando no conecta, el problema es red/host/puerto/firewall del servidor (no del workflow).
 
+### Qué hacer exactamente cuando ves `Process completed with exit code 1` en el pre-check
+
+1. Entra a cPanel → **FTP Accounts** o **General Information** y copia el **hostname real del servidor** (ej. `server123.web-hosting.com`).
+2. Pega ese valor en el secret `FTP_SERVER` (no uses `midominio.com` si pasa por Cloudflare).
+3. Deja estos valores iniciales seguros:
+   - `FTP_PORT=21`
+   - `FTP_PROTOCOL=ftps`
+4. Si usas Cloudflare, pon el registro DNS del host FTP en **DNS only** (nube gris).
+5. Re-ejecuta el workflow.
+
 > Nota: `SamKirkland/FTP-Deploy-Action` soporta `ftp/ftps`, pero **no** `sftp` (SSH).
