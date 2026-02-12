@@ -61,4 +61,37 @@ class WatiApi
             'body' => $res->json() ?? $res->body(),
         ];
     }
+
+    public function updateContactAttributes(string $phone, array $customParams): array
+    {
+        $url = sprintf(
+            '%s/%s/api/v1/updateContactAttributes/%s?sourceType=%s',
+            $this->baseUrl,
+            $this->tenantId,
+            rawurlencode($phone),
+            rawurlencode($this->sourceType)
+        );
+
+        $payload = [
+            'customParams' => $customParams,
+        ];
+
+        $res = Http::timeout(20)
+            ->retry(2, 300)
+            ->withHeaders([
+                'Authorization' => 'Bearer ' . $this->token,
+                'accept' => '*/*',
+                'Content-Type' => 'application/json-patch+json',
+            ])
+            ->post($url, $payload);
+
+        if (!$res->successful()) {
+            throw new RuntimeException('Error en WATI (' . $res->status() . '): ' . substr($res->body(), 0, 300));
+        }
+
+        return [
+            'status' => $res->status(),
+            'body' => $res->json() ?? $res->body(),
+        ];
+    }
 }
