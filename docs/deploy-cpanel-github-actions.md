@@ -2,6 +2,8 @@
 
 Este repo trae un workflow en `.github/workflows/main.yml` para desplegar por FTP/FTPS a cPanel.
 
+> Nota: aunque los secretos se llamen `SFTP_*` por compatibilidad histórica, la acción usada por GitHub Actions acepta protocolos `ftp`, `ftps` o `ftps-legacy` (no `sftp`).
+
 ## 1) Secretos requeridos en GitHub
 
 En tu repo: **Settings → Secrets and variables → Actions → New repository secret**.
@@ -17,7 +19,8 @@ Crea estos secretos (**usados por el workflow actual**):
 
 Opcionales:
 
-- `SFTP_PORT`: normalmente `22` para SFTP (o el puerto que te dé Namecheap).
+- `SFTP_PORT`: normalmente `21` para FTPS explícito (o el puerto que te dé Namecheap).
+- `SFTP_PROTOCOL`: `ftps` (recomendado), `ftp` o `ftps-legacy`.
 
 Compatibilidad: si ya usabas `FTP_*`, el workflow también los acepta como fallback.
 
@@ -36,7 +39,7 @@ Yo no puedo crear secretos en tu cuenta sin tus credenciales.
    - `SFTP_USERNAME`
    - `SFTP_PASSWORD`
    - `SFTP_SERVER_DIR`
-   - (opcional) `SFTP_PORT`
+   - (opcionales) `SFTP_PORT`, `SFTP_PROTOCOL`
 
 ### Opción B: por CLI (automatizada)
 
@@ -96,7 +99,7 @@ Si quieres esta variante, te configuro un workflow por SSH (más confiable que F
 
 - Host/usuario/password incorrectos.
 - `FTP_SERVER_DIR` mal (slash final y ruta exacta importan).
-- Puerto/protocolo incompatibles (`ftp` vs `ftps`).
+- Puerto/protocolo incompatibles (`ftp`, `ftps`, `ftps-legacy`; **no** `sftp` con esta acción).
 - Firewall del hosting bloqueando IPs.
 - `.env` ausente o con `APP_KEY` inválida.
 - Permisos en `storage/` y `bootstrap/cache/`.

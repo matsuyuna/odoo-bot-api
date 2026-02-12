@@ -35,8 +35,19 @@ read -r -p "SFTP_USERNAME: " SFTP_USERNAME
 read -r -s -p "SFTP_PASSWORD: " SFTP_PASSWORD
 printf '\n'
 read -r -p "SFTP_SERVER_DIR (ej: /home/USER/public_html/app/): " SFTP_SERVER_DIR
-read -r -p "SFTP_PORT [22]: " SFTP_PORT
-SFTP_PORT="${SFTP_PORT:-22}"
+read -r -p "SFTP_PORT [21]: " SFTP_PORT
+SFTP_PORT="${SFTP_PORT:-21}"
+read -r -p "SFTP_PROTOCOL [ftps]: " SFTP_PROTOCOL
+SFTP_PROTOCOL="${SFTP_PROTOCOL:-ftps}"
+
+case "$SFTP_PROTOCOL" in
+  ftp|ftps|ftps-legacy) ;;
+  *)
+    echo "Error: SFTP_PROTOCOL inválido: '$SFTP_PROTOCOL'"
+    echo "Valores permitidos: ftp, ftps, ftps-legacy"
+    exit 1
+    ;;
+esac
 
 echo "Configurando secrets SFTP_* en $REPO ..."
 printf '%s' "$SFTP_HOST" | gh secret set SFTP_HOST --repo "$REPO"
@@ -44,6 +55,7 @@ printf '%s' "$SFTP_USERNAME" | gh secret set SFTP_USERNAME --repo "$REPO"
 printf '%s' "$SFTP_PASSWORD" | gh secret set SFTP_PASSWORD --repo "$REPO"
 printf '%s' "$SFTP_SERVER_DIR" | gh secret set SFTP_SERVER_DIR --repo "$REPO"
 printf '%s' "$SFTP_PORT" | gh secret set SFTP_PORT --repo "$REPO"
+printf '%s' "$SFTP_PROTOCOL" | gh secret set SFTP_PROTOCOL --repo "$REPO"
 
 echo "OK. Secrets SFTP_* cargados correctamente."
 echo "Puedes validar con: gh secret list --repo $REPO"

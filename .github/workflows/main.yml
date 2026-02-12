@@ -35,6 +35,7 @@ jobs:
           SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
           SFTP_SERVER_DIR: ${{ secrets.SFTP_SERVER_DIR }}
           SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_PROTOCOL: ${{ secrets.SFTP_PROTOCOL }}
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
@@ -49,7 +50,7 @@ jobs:
           DEPLOY_PASSWORD="${SFTP_PASSWORD:-${FTP_PASSWORD:-}}"
           DEPLOY_SERVER_DIR="${SFTP_SERVER_DIR:-${FTP_SERVER_DIR:-}}"
           DEPLOY_PORT="${SFTP_PORT:-${FTP_PORT:-21}}"
-          DEPLOY_PROTOCOL="${FTP_PROTOCOL:-sftp}"
+          DEPLOY_PROTOCOL="${SFTP_PROTOCOL:-${FTP_PROTOCOL:-ftps}}"
 
           for key in DEPLOY_SERVER DEPLOY_USERNAME DEPLOY_PASSWORD DEPLOY_SERVER_DIR; do
             if [ -z "${!key}" ]; then
@@ -59,6 +60,15 @@ jobs:
             fi
           done
 
+          case "$DEPLOY_PROTOCOL" in
+            ftp|ftps|ftps-legacy) ;;
+            *)
+              echo "Invalid DEPLOY_PROTOCOL: '$DEPLOY_PROTOCOL'."
+              echo "Allowed values: ftp, ftps, ftps-legacy"
+              exit 1
+              ;;
+          esac
+
           echo "DEPLOY_SERVER=$DEPLOY_SERVER" >> "$GITHUB_ENV"
           echo "DEPLOY_USERNAME=$DEPLOY_USERNAME" >> "$GITHUB_ENV"
           echo "DEPLOY_PASSWORD=$DEPLOY_PASSWORD" >> "$GITHUB_ENV"
@@ -66,7 +76,7 @@ jobs:
           echo "DEPLOY_PORT=$DEPLOY_PORT" >> "$GITHUB_ENV"
           echo "DEPLOY_PROTOCOL=$DEPLOY_PROTOCOL" >> "$GITHUB_ENV"
 
-      - name: Deploy to cPanel (SFTP/FTP/FTPS)
+      - name: Deploy to cPanel (FTP/FTPS)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ env.DEPLOY_SERVER }}
