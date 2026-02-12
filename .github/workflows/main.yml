@@ -26,4 +26,4 @@ jobs:
           username: ${{ secrets.SFTP_USERNAME }}
           password: ${{ secrets.SFTP_PASSWORD }}
           port: 21
-          server-dir: "/home/linoxrfm/odoo-bot-api/"
+          server-dir: "/odoo-bot-api/"
