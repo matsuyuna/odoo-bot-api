@@ -30,32 +30,40 @@ if [[ -z "$REPO" ]]; then
   REPO="$(printf '%s' "$REMOTE_URL" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
 fi
 
-read -r -p "SFTP_HOST: " SFTP_HOST
-read -r -p "SFTP_USERNAME: " SFTP_USERNAME
-read -r -s -p "SFTP_PASSWORD: " SFTP_PASSWORD
+read -r -p "FTP_SERVER: " FTP_SERVER
+read -r -p "FTP_USERNAME: " FTP_USERNAME
+read -r -s -p "FTP_PASSWORD: " FTP_PASSWORD
 printf '\n'
-read -r -p "SFTP_SERVER_DIR (ej: /home/USER/public_html/app/): " SFTP_SERVER_DIR
-read -r -p "SFTP_PORT [21]: " SFTP_PORT
-SFTP_PORT="${SFTP_PORT:-21}"
-read -r -p "SFTP_PROTOCOL [ftps]: " SFTP_PROTOCOL
-SFTP_PROTOCOL="${SFTP_PROTOCOL:-ftps}"
+read -r -p "FTP_SERVER_DIR (ej: /home/USER/public_html/app/): " FTP_SERVER_DIR
+read -r -p "FTP_PORT [21]: " FTP_PORT
+FTP_PORT="${FTP_PORT:-21}"
+read -r -p "FTP_PROTOCOL [ftps]: " FTP_PROTOCOL
+FTP_PROTOCOL="${FTP_PROTOCOL:-ftps}"
 
-case "$SFTP_PROTOCOL" in
+case "$FTP_PROTOCOL" in
   ftp|ftps|ftps-legacy) ;;
   *)
-    echo "Error: SFTP_PROTOCOL inválido: '$SFTP_PROTOCOL'"
+    echo "Error: FTP_PROTOCOL inválido: '$FTP_PROTOCOL'"
     echo "Valores permitidos: ftp, ftps, ftps-legacy"
     exit 1
     ;;
 esac
 
-echo "Configurando secrets SFTP_* en $REPO ..."
-printf '%s' "$SFTP_HOST" | gh secret set SFTP_HOST --repo "$REPO"
-printf '%s' "$SFTP_USERNAME" | gh secret set SFTP_USERNAME --repo "$REPO"
-printf '%s' "$SFTP_PASSWORD" | gh secret set SFTP_PASSWORD --repo "$REPO"
-printf '%s' "$SFTP_SERVER_DIR" | gh secret set SFTP_SERVER_DIR --repo "$REPO"
-printf '%s' "$SFTP_PORT" | gh secret set SFTP_PORT --repo "$REPO"
-printf '%s' "$SFTP_PROTOCOL" | gh secret set SFTP_PROTOCOL --repo "$REPO"
+echo "Configurando secrets FTP_* en $REPO ..."
+printf '%s' "$FTP_SERVER" | gh secret set FTP_SERVER --repo "$REPO"
+printf '%s' "$FTP_USERNAME" | gh secret set FTP_USERNAME --repo "$REPO"
+printf '%s' "$FTP_PASSWORD" | gh secret set FTP_PASSWORD --repo "$REPO"
+printf '%s' "$FTP_SERVER_DIR" | gh secret set FTP_SERVER_DIR --repo "$REPO"
+printf '%s' "$FTP_PORT" | gh secret set FTP_PORT --repo "$REPO"
+printf '%s' "$FTP_PROTOCOL" | gh secret set FTP_PROTOCOL --repo "$REPO"
 
-echo "OK. Secrets SFTP_* cargados correctamente."
+echo "Configurando secrets SFTP_* por compatibilidad ..."
+printf '%s' "$FTP_SERVER" | gh secret set SFTP_HOST --repo "$REPO"
+printf '%s' "$FTP_USERNAME" | gh secret set SFTP_USERNAME --repo "$REPO"
+printf '%s' "$FTP_PASSWORD" | gh secret set SFTP_PASSWORD --repo "$REPO"
+printf '%s' "$FTP_SERVER_DIR" | gh secret set SFTP_SERVER_DIR --repo "$REPO"
+printf '%s' "$FTP_PORT" | gh secret set SFTP_PORT --repo "$REPO"
+printf '%s' "$FTP_PROTOCOL" | gh secret set SFTP_PROTOCOL --repo "$REPO"
+
+echo "OK. Secrets FTP_* y SFTP_* cargados correctamente."
 echo "Puedes validar con: gh secret list --repo $REPO"

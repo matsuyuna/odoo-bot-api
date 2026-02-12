@@ -2,27 +2,29 @@
 
 Este repo trae un workflow en `.github/workflows/main.yml` para desplegar por FTP/FTPS a cPanel.
 
-> Nota: aunque los secretos se llamen `SFTP_*` por compatibilidad histórica, la acción usada por GitHub Actions acepta protocolos `ftp`, `ftps` o `ftps-legacy` (no `sftp`).
+> Nota: el workflow ahora prioriza secretos `FTP_*` (más claro para Namecheap/cPanel), y mantiene compatibilidad con `SFTP_*` como fallback histórico. La acción usada por GitHub Actions acepta `ftp`, `ftps` o `ftps-legacy` (no `sftp`).
 
 ## 1) Secretos requeridos en GitHub
 
 En tu repo: **Settings → Secrets and variables → Actions → New repository secret**.
 
-Crea estos secretos (**usados por el workflow actual**):
+Crea estos secretos (**preferidos por el workflow actual**):
 
-- `SFTP_HOST`: host de cPanel (ej. `ftp.tudominio.com` o hostname del servidor).
-- `SFTP_USERNAME`: usuario SFTP/FTP.
-- `SFTP_PASSWORD`: password SFTP/FTP.
-- `SFTP_SERVER_DIR`: ruta remota absoluta donde vive el proyecto, por ejemplo:
+- `FTP_SERVER`: host de cPanel (ej. `ftp.tudominio.com` o hostname del servidor).
+- `FTP_USERNAME`: usuario FTP.
+- `FTP_PASSWORD`: password FTP.
+- `FTP_SERVER_DIR`: ruta remota absoluta donde vive el proyecto, por ejemplo:
   - `/home/USUARIO/public_html/odoo-bot-api/`
   - o `/home/USUARIO/tudominio.com/odoo-bot-api/`
 
 Opcionales:
 
-- `SFTP_PORT`: normalmente `21` para FTPS explícito (o el puerto que te dé Namecheap).
-- `SFTP_PROTOCOL`: `ftps` (recomendado), `ftp` o `ftps-legacy`.
+- `FTP_PORT`: normalmente `21` para FTPS explícito (o el puerto que te dé Namecheap).
+- `FTP_PROTOCOL`: `ftps` (recomendado), `ftp` o `ftps-legacy`.
 
-Compatibilidad: si ya usabas `FTP_*`, el workflow también los acepta como fallback.
+Compatibilidad: si ya usabas `SFTP_*`, el workflow también los acepta como fallback.
+
+Tip: si `FTP_SERVER_DIR` viene sin slash final, el workflow lo normaliza automáticamente para que termine en `/`.
 
 ## 1.1) ¿Me los puedes crear tú los secrets?
 
@@ -35,15 +37,15 @@ Yo no puedo crear secretos en tu cuenta sin tus credenciales.
 2. **Settings** → **Secrets and variables** → **Actions**.
 3. Clic en **New repository secret**.
 4. Crea uno por uno:
-   - `SFTP_HOST`
-   - `SFTP_USERNAME`
-   - `SFTP_PASSWORD`
-   - `SFTP_SERVER_DIR`
-   - (opcionales) `SFTP_PORT`, `SFTP_PROTOCOL`
+   - `FTP_SERVER`
+   - `FTP_USERNAME`
+   - `FTP_PASSWORD`
+   - `FTP_SERVER_DIR`
+   - (opcionales) `FTP_PORT`, `FTP_PROTOCOL`
 
 ### Opción B: por CLI (automatizada)
 
-Este repo incluye el script `scripts/setup-github-secrets.sh` (crea `SFTP_*`).
+Este repo incluye el script `scripts/setup-github-secrets.sh` (crea `FTP_*` y también `SFTP_*` para compatibilidad).
 
 ```bash
 # 1) login en GitHub CLI
