@@ -10,3 +10,5 @@ Artisan::command('inspire', function () {
 
 Schedule::command('odoo:contacts:pull --batch-size=500 --max-total=0')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('wati:contacts:push --limit=150')->everyFiveMinutes()->withoutOverlapping();
+
+Schedule::command('wati:contacts:pull --page-size=100 --max-pages=2')->everyTenMinutes()->withoutOverlapping();
