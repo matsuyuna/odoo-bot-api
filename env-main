@@ -69,3 +69,8 @@ ODOO_URL=https://binaural-dev-bodegonactual.odoo.com
 ODOO_DB=binaural-dev-bodegonactual-release-8444626
 ODOO_USERNAME=desarrollogrupomon@gmail.com
 ODOO_PASSWORD=1eead6908523cb8065dff62c751ea9346405e6d5
+
+WATI_BASE_URL=https://live-mt-server.wati.io
+WATI_TENANT_ID=
+WATI_TOKEN=
+WATI_SOURCE_TYPE=Wati
