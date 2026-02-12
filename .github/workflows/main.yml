@@ -28,7 +28,7 @@ jobs:
       - name: Build production dependencies
         run: composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 
-      - name: Resolve deploy secrets (SFTP_* preferred)
+      - name: Resolve deploy secrets (FTP_* preferred)
         env:
           SFTP_HOST: ${{ secrets.SFTP_HOST }}
           SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
@@ -45,20 +45,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          DEPLOY_SERVER="${SFTP_HOST:-${FTP_SERVER:-}}"
-          DEPLOY_USERNAME="${SFTP_USERNAME:-${FTP_USERNAME:-}}"
-          DEPLOY_PASSWORD="${SFTP_PASSWORD:-${FTP_PASSWORD:-}}"
-          DEPLOY_SERVER_DIR="${SFTP_SERVER_DIR:-${FTP_SERVER_DIR:-}}"
-          DEPLOY_PORT="${SFTP_PORT:-${FTP_PORT:-21}}"
-          DEPLOY_PROTOCOL="${SFTP_PROTOCOL:-${FTP_PROTOCOL:-ftps}}"
+          DEPLOY_SERVER="${FTP_SERVER:-${SFTP_HOST:-}}"
+          DEPLOY_USERNAME="${FTP_USERNAME:-${SFTP_USERNAME:-}}"
+          DEPLOY_PASSWORD="${FTP_PASSWORD:-${SFTP_PASSWORD:-}}"
+          DEPLOY_SERVER_DIR="${FTP_SERVER_DIR:-${SFTP_SERVER_DIR:-}}"
+          DEPLOY_PORT="${FTP_PORT:-${SFTP_PORT:-21}}"
+          DEPLOY_PROTOCOL="${FTP_PROTOCOL:-${SFTP_PROTOCOL:-ftps}}"
 
           for key in DEPLOY_SERVER DEPLOY_USERNAME DEPLOY_PASSWORD DEPLOY_SERVER_DIR; do
             if [ -z "${!key}" ]; then
               echo "Missing required secret value for $key"
-              echo "Expected SFTP_* (preferred) or FTP_* equivalent."
+              echo "Expected FTP_* (preferred) or SFTP_* equivalent."
               exit 1
             fi
           done
+
+
+          # FTP-Deploy-Action exige que server-dir termine en '/'.
+          DEPLOY_SERVER_DIR="${DEPLOY_SERVER_DIR%/}/"
 
           case "$DEPLOY_PROTOCOL" in
             ftp|ftps|ftps-legacy) ;;
@@ -75,6 +79,39 @@ jobs:
           echo "DEPLOY_SERVER_DIR=$DEPLOY_SERVER_DIR" >> "$GITHUB_ENV"
           echo "DEPLOY_PORT=$DEPLOY_PORT" >> "$GITHUB_ENV"
           echo "DEPLOY_PROTOCOL=$DEPLOY_PROTOCOL" >> "$GITHUB_ENV"
+
+
+      - name: Preflight FTP connectivity check
+        run: |
+          set -euo pipefail
+
+          echo "Checking TCP connectivity to ${DEPLOY_SERVER}:${DEPLOY_PORT} ..."
+          echo "DNS resolution for ${DEPLOY_SERVER}:"
+          RESOLVED_IPS="$(getent ahosts "$DEPLOY_SERVER" | awk '{print $1}' | sort -u || true)"
+          if [ -n "$RESOLVED_IPS" ]; then
+            echo "$RESOLVED_IPS"
+          else
+            echo "(no DNS records resolved from runner)"
+          fi
+
+          if ! timeout 15 nc -vz "$DEPLOY_SERVER" "$DEPLOY_PORT"; then
+            echo ""
+            echo "Could not open control socket to ${DEPLOY_SERVER}:${DEPLOY_PORT}."
+            echo "This is usually a network/host/protocol issue (not credentials)."
+            echo ""
+            if echo "$RESOLVED_IPS" | grep -Eq '^(104\.|172\.67\.|2606:4700:)'; then
+              echo "Detected Cloudflare-like IPs for FTP_SERVER."
+              echo "Use the real cPanel hostname (serverXXX.web-hosting.com) in FTP_SERVER."
+              echo "Do NOT use proxied domains for FTP/FTPS."
+              echo ""
+            fi
+            echo "Common fixes for Namecheap/cPanel:"
+            echo "- Use the real cPanel/hosting hostname in FTP_SERVER (serverXXX.web-hosting.com), not a proxied domain."
+            echo "- Verify FTP_PORT and FTP_PROTOCOL match your hosting panel (usually 21 + ftps)."
+            echo "- In Cloudflare DNS, set FTP host/subdomain to DNS only (gray cloud), not proxied."
+            echo "- If your host only supports SFTP/SSH, this action will not work; use an SFTP/SSH deploy action instead."
+            exit 1
+          fi
 
       - name: Deploy to cPanel (FTP/FTPS)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
