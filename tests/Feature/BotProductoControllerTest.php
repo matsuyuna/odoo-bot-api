@@ -17,6 +17,7 @@ class BotProductoControllerTest extends TestCase
         putenv('ODOO_DB=test_db');
         putenv('ODOO_USERNAME=test_user');
         putenv('ODOO_PASSWORD=test_pass');
+        putenv('ODOO_STORE_LOCATION_IDS');
     }
 
     public function test_buscar_producto_actualiza_custom_param_productos_en_wati(): void
@@ -40,7 +41,9 @@ class BotProductoControllerTest extends TestCase
             ->assertOk()
             ->assertJsonCount(2)
             ->assertJsonPath('0.name', 'Acetaminofen 500mg')
-            ->assertJsonPath('1.name', 'Acetaminofen Infantil');
+            ->assertJsonPath('0.price', 19.9)
+            ->assertJsonPath('1.name', 'Acetaminofen Infantil')
+            ->assertJsonPath('1.price', 12.4);
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/api/v1/updateContactAttributes/584001112233')
@@ -63,6 +66,27 @@ class BotProductoControllerTest extends TestCase
         $response->assertOk()->assertJsonCount(2);
 
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'updateContactAttributes'));
+    }
+
+    public function test_buscar_producto_suma_stock_solo_en_depositos_configurados(): void
+    {
+        putenv('ODOO_STORE_LOCATION_IDS=11,12');
+
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->nameSearchXml(), 200)
+                ->push($this->productReadXml(), 200)
+                ->push($this->productReadByLocationXml(3, 1), 200)
+                ->push($this->productReadByLocationXml(4, 2), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto?nombre=acetaminofen');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('0.qty_available', 7)
+            ->assertJsonPath('1.qty_available', 3);
     }
 
     private function authXml(int $uid): string
@@ -130,6 +154,7 @@ XML;
                 <member><name>name</name><value><string>Acetaminofen 500mg</string></value></member>
                 <member><name>default_code</name><value><string>ACE500</string></value></member>
                 <member><name>qty_available</name><value><double>11</double></value></member>
+                <member><name>lst_price</name><value><double>19.9</double></value></member>
                 <member><name>barcode</name><value><string>12345</string></value></member>
               </struct>
             </value>
@@ -139,7 +164,39 @@ XML;
                 <member><name>name</name><value><string>Acetaminofen Infantil</string></value></member>
                 <member><name>default_code</name><value><string>ACEINF</string></value></member>
                 <member><name>qty_available</name><value><double>4</double></value></member>
+                <member><name>lst_price</name><value><double>12.4</double></value></member>
                 <member><name>barcode</name><value><string>67890</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productReadByLocationXml(float $qty501, float $qty502): string
+    {
+        return <<<XML
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>501</int></value></member>
+                <member><name>qty_available</name><value><double>{$qty501}</double></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>502</int></value></member>
+                <member><name>qty_available</name><value><double>{$qty502}</double></value></member>
               </struct>
             </value>
           </data>
