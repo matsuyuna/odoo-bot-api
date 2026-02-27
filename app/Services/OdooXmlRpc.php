@@ -382,7 +382,6 @@ class OdooXmlRpc
 
     /**
      * Suma qty_available por producto en los depósitos de tienda configurados.
-     * Hace una sola consulta a stock.quant para reducir carga hacia Odoo.
      *
      * @param int[] $productIds
      * @param int[] $locationIds
@@ -390,29 +389,28 @@ class OdooXmlRpc
      */
     private function readQtyAvailableByLocations(array $productIds, array $locationIds): array
     {
-        $rows = $this->searchRead('stock.quant', [
-            ['product_id', 'in', $productIds],
-            ['location_id', 'child_of', $locationIds],
-        ], ['product_id', 'available_quantity'], 5000);
-
         $totals = [];
 
-        foreach ($rows as $row) {
-            $productField = $row['product_id'] ?? null;
+        foreach ($locationIds as $locationId) {
+            $rows = $this->readWithContext('product.product', $productIds, ['id', 'qty_available'], [
+                'location' => $locationId,
+            ]);
 
-            if (!is_array($productField) || !isset($productField[0]) || !is_int($productField[0])) {
-                continue;
+            foreach ($rows as $row) {
+                $id = (int) ($row['id'] ?? 0);
+                if ($id <= 0) {
+                    continue;
+                }
+
+                $totals[$id] = ($totals[$id] ?? 0.0) + (float) ($row['qty_available'] ?? 0);
             }
-
-            $productId = $productField[0];
-            $totals[$productId] = ($totals[$productId] ?? 0.0) + (float) ($row['available_quantity'] ?? 0);
         }
 
         return $totals;
     }
 
-    /** search_read(model, domain, fields, limit) -> array de dicts */
-    private function searchRead(string $model, array $domain, array $fields, int $limit = 200): array
+    /** read(model, ids, fields, context) -> array de dicts */
+    private function readWithContext(string $model, array $ids, array $fields, array $context = []): array
     {
         $uid = $this->getUid();
 
@@ -421,11 +419,11 @@ class OdooXmlRpc
             $uid,
             $this->password,
             $model,
-            'search_read',
-            [$domain],
+            'read',
+            [$ids],
             [
                 'fields' => $fields,
-                'limit' => $limit,
+                'context' => $context,
             ],
         ]);
 

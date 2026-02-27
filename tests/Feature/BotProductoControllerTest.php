@@ -77,7 +77,8 @@ class BotProductoControllerTest extends TestCase
             'https://odoo.test/xmlrpc/2/object' => Http::sequence()
                 ->push($this->nameSearchXml(), 200)
                 ->push($this->productReadXml(), 200)
-                ->push($this->stockQuantByLocationsXml(7, 3), 200),
+                ->push($this->productReadByLocationXml(3, 1), 200)
+                ->push($this->productReadByLocationXml(4, 2), 200),
         ]);
 
         $response = $this->getJson('/api/buscar-producto?nombre=acetaminofen');
@@ -176,7 +177,7 @@ XML;
 XML;
     }
 
-    private function stockQuantByLocationsXml(float $qty501, float $qty502): string
+    private function productReadByLocationXml(float $qty501, float $qty502): string
     {
         return <<<XML
 <?xml version="1.0"?>
@@ -188,32 +189,14 @@ XML;
           <data>
             <value>
               <struct>
-                <member><name>product_id</name>
-                  <value>
-                    <array>
-                      <data>
-                        <value><int>501</int></value>
-                        <value><string>Acetaminofen 500mg</string></value>
-                      </data>
-                    </array>
-                  </value>
-                </member>
-                <member><name>available_quantity</name><value><double>{$qty501}</double></value></member>
+                <member><name>id</name><value><int>501</int></value></member>
+                <member><name>qty_available</name><value><double>{$qty501}</double></value></member>
               </struct>
             </value>
             <value>
               <struct>
-                <member><name>product_id</name>
-                  <value>
-                    <array>
-                      <data>
-                        <value><int>502</int></value>
-                        <value><string>Acetaminofen Infantil</string></value>
-                      </data>
-                    </array>
-                  </value>
-                </member>
-                <member><name>available_quantity</name><value><double>{$qty502}</double></value></member>
+                <member><name>id</name><value><int>502</int></value></member>
+                <member><name>qty_available</name><value><double>{$qty502}</double></value></member>
               </struct>
             </value>
           </data>
