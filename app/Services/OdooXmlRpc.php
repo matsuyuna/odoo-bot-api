@@ -93,8 +93,15 @@ class OdooXmlRpc
 
         // read para traer campos
         $rows = $this->read('product.product', $idsFinal, [
-            'id', 'name', 'default_code', 'qty_available', 'barcode'
+            'id', 'name', 'default_code', 'qty_available', 'barcode', 'lst_price'
         ]);
+
+        $qtyByProductId = [];
+        $storeLocationIds = $this->getStoreLocationIds();
+
+        if (!empty($storeLocationIds)) {
+            $qtyByProductId = $this->readQtyAvailableByLocations($idsFinal, $storeLocationIds);
+        }
 
         // Normaliza salida
         $out = [];
@@ -104,7 +111,8 @@ class OdooXmlRpc
                 'name' => $r['name'] ?? null,
                 'default_code' => $r['default_code'] ?? null,
                 'barcode' => $r['barcode'] ?? null,
-                'qty_available' => $r['qty_available'] ?? 0,
+                'qty_available' => $qtyByProductId[$r['id'] ?? 0] ?? ($r['qty_available'] ?? 0),
+                'price' => $r['lst_price'] ?? 0,
             ];
         }
 
@@ -336,6 +344,89 @@ class OdooXmlRpc
             'read',
             [$ids],
             ['fields' => $fields],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+
+        return is_array($parsed) ? $parsed : [];
+    }
+
+    /**
+     * @return int[]
+     */
+    private function getStoreLocationIds(): array
+    {
+        $raw = trim((string) env('ODOO_STORE_LOCATION_IDS', ''));
+
+        if ($raw === '') {
+            return [];
+        }
+
+        $parts = array_map('trim', explode(',', $raw));
+        $ids = [];
+
+        foreach ($parts as $part) {
+            if (!is_numeric($part)) {
+                continue;
+            }
+
+            $id = (int) $part;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * Suma qty_available por producto en los depósitos de tienda configurados.
+     * Hace una sola consulta a stock.quant para reducir carga hacia Odoo.
+     *
+     * @param int[] $productIds
+     * @param int[] $locationIds
+     * @return array<int,float>
+     */
+    private function readQtyAvailableByLocations(array $productIds, array $locationIds): array
+    {
+        $rows = $this->searchRead('stock.quant', [
+            ['product_id', 'in', $productIds],
+            ['location_id', 'child_of', $locationIds],
+        ], ['product_id', 'available_quantity'], 5000);
+
+        $totals = [];
+
+        foreach ($rows as $row) {
+            $productField = $row['product_id'] ?? null;
+
+            if (!is_array($productField) || !isset($productField[0]) || !is_int($productField[0])) {
+                continue;
+            }
+
+            $productId = $productField[0];
+            $totals[$productId] = ($totals[$productId] ?? 0.0) + (float) ($row['available_quantity'] ?? 0);
+        }
+
+        return $totals;
+    }
+
+    /** search_read(model, domain, fields, limit) -> array de dicts */
+    private function searchRead(string $model, array $domain, array $fields, int $limit = 200): array
+    {
+        $uid = $this->getUid();
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            $model,
+            'search_read',
+            [$domain],
+            [
+                'fields' => $fields,
+                'limit' => $limit,
+            ],
         ]);
 
         $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);

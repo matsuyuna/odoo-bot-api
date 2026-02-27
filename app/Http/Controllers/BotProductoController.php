@@ -23,6 +23,7 @@ class BotProductoController extends Controller
 
             $respuesta = array_map(function (array $producto) {
                 $qtyAvailable = (float) ($producto['qty_available'] ?? 0);
+                $price = (float) ($producto['price'] ?? 0);
 
                 return [
                     'id' => $producto['id'] ?? null,
@@ -30,10 +31,12 @@ class BotProductoController extends Controller
                     'default_code' => $producto['default_code'] ?? null,
                     'barcode' => $producto['barcode'] ?? null,
                     'qty_available' => $qtyAvailable,
+                    'price' => $price,
                     'availability_text' => sprintf(
-                        '%s - %s',
+                        '%s - %s - Precio: %.2f',
                         $producto['name'] ?? 'Producto sin nombre',
-                        $qtyAvailable > 0 ? 'Si hay disponible' : 'no hay disponible'
+                        $qtyAvailable > 0 ? 'Si hay disponible' : 'no hay disponible',
+                        $price,
                     ),
                 ];
             }, array_slice($productos, 0, 7));
