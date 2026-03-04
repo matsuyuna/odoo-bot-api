@@ -216,7 +216,125 @@ class OdooXmlRpc
         return is_array($parsed) ? $parsed : [];
     }
 
-    
+    /**
+     * Inspecciona un producto buscando por nombre y devuelve todos sus campos.
+     */
+    public function inspectProductByName(string $query): array
+    {
+        $query = trim($query);
+
+        if ($query === '') {
+            return [];
+        }
+
+        $pairs = $this->nameSearch('product.product', $query, 1);
+        $productId = $pairs[0][0] ?? null;
+
+        if (!is_int($productId) || $productId <= 0) {
+            return [];
+        }
+
+        $fields = $this->fieldsGet('product.product');
+        $fieldNames = array_keys($fields);
+        ['record' => $record, 'unreadable_fields' => $unreadableFields] = $this->readRecordSafely(
+            'product.product',
+            $productId,
+            $fieldNames,
+        );
+
+        $priceCandidates = [];
+        foreach ($fields as $fieldName => $meta) {
+            $label = mb_strtolower((string) ($meta['string'] ?? ''));
+            $name = mb_strtolower((string) $fieldName);
+            $type = (string) ($meta['type'] ?? '');
+            $looksLikePrice = str_contains($name, 'price')
+                || str_contains($name, 'cost')
+                || str_contains($label, 'precio')
+                || str_contains($label, 'price')
+                || str_contains($label, 'costo')
+                || in_array($type, ['monetary', 'float'], true);
+
+            if (!$looksLikePrice || !array_key_exists($fieldName, $record)) {
+                continue;
+            }
+
+            $priceCandidates[$fieldName] = [
+                'label' => $meta['string'] ?? $fieldName,
+                'type' => $type,
+                'value' => $record[$fieldName],
+            ];
+        }
+
+        return [
+            'id' => $productId,
+            'display_name' => $pairs[0][1] ?? null,
+            'fields' => $fields,
+            'record' => $record,
+            'unreadable_fields' => $unreadableFields,
+            'price_candidates' => $priceCandidates,
+        ];
+    }
+
+    /**
+     * Lee un registro tolerando campos dañados/incompatibles de Odoo.
+     * Devuelve los campos legibles y la lista de campos que fallaron al leer.
+     *
+     * @param string[] $fieldNames
+     * @return array{record: array<string,mixed>, unreadable_fields: string[]}
+     */
+    private function readRecordSafely(string $model, int $id, array $fieldNames): array
+    {
+        $record = [];
+        $unreadable = [];
+
+        foreach (array_chunk($fieldNames, 25) as $chunk) {
+            ['record' => $chunkRecord, 'unreadable_fields' => $chunkUnreadable] = $this->readFieldsChunkSafely($model, $id, $chunk);
+            $record = array_merge($record, $chunkRecord);
+            $unreadable = array_merge($unreadable, $chunkUnreadable);
+        }
+
+        $record['id'] = $id;
+
+        return [
+            'record' => $record,
+            'unreadable_fields' => array_values(array_unique($unreadable)),
+        ];
+    }
+
+    /**
+     * @param string[] $fields
+     * @return array{record: array<string,mixed>, unreadable_fields: string[]}
+     */
+    private function readFieldsChunkSafely(string $model, int $id, array $fields): array
+    {
+        if (empty($fields)) {
+            return ['record' => [], 'unreadable_fields' => []];
+        }
+
+        try {
+            $rows = $this->read($model, [$id], $fields);
+            return [
+                'record' => is_array($rows[0] ?? null) ? $rows[0] : [],
+                'unreadable_fields' => [],
+            ];
+        } catch (RuntimeException $e) {
+            if (count($fields) === 1) {
+                return ['record' => [], 'unreadable_fields' => $fields];
+            }
+
+            $middle = (int) floor(count($fields) / 2);
+            $left = array_slice($fields, 0, $middle);
+            $right = array_slice($fields, $middle);
+
+            ['record' => $leftRecord, 'unreadable_fields' => $leftUnreadable] = $this->readFieldsChunkSafely($model, $id, $left);
+            ['record' => $rightRecord, 'unreadable_fields' => $rightUnreadable] = $this->readFieldsChunkSafely($model, $id, $right);
+
+            return [
+                'record' => array_merge($leftRecord, $rightRecord),
+                'unreadable_fields' => array_merge($leftUnreadable, $rightUnreadable),
+            ];
+        }
+    }
 
     public function findContactIdByPhoneOrEmail(?string $phone, ?string $email): ?int
     {
@@ -344,6 +462,28 @@ class OdooXmlRpc
             'read',
             [$ids],
             ['fields' => $fields],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+
+        return is_array($parsed) ? $parsed : [];
+    }
+
+    private function fieldsGet(string $model): array
+    {
+        $uid = $this->getUid();
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            $model,
+            'fields_get',
+            [],
+            [
+                'attributes' => ['string', 'type', 'help', 'currency_field'],
+            ],
         ]);
 
         $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
