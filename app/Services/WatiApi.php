@@ -17,9 +17,17 @@ class WatiApi
     public static function fromEnv(): self
     {
         $baseUrl = rtrim((string) env('WATI_BASE_URL', 'https://live-mt-server.wati.io'), '/');
-        $tenantId = (string) env('WATI_TENANT_ID', '');
-        $token = (string) env('WATI_TOKEN', '');
+        $tenantId = trim((string) env('WATI_TENANT_ID', ''));
+        $token = trim((string) env('WATI_TOKEN', ''));
         $sourceType = (string) env('WATI_SOURCE_TYPE', 'Wati');
+
+        if (str_starts_with(strtolower($token), 'bearer ')) {
+            $token = trim(substr($token, 7));
+        }
+
+        if (!$tenantId) {
+            $tenantId = self::extractTenantIdFromBaseUrl($baseUrl);
+        }
 
         if (!$baseUrl || !$tenantId || !$token) {
             throw new RuntimeException('Faltan variables de entorno de WATI (WATI_BASE_URL, WATI_TENANT_ID, WATI_TOKEN).');
@@ -31,9 +39,8 @@ class WatiApi
     public function addContact(string $phone, string $name, array $customParams = []): array
     {
         $url = sprintf(
-            '%s/%s/api/v1/addContact/%s?sourceType=%s',
-            $this->baseUrl,
-            $this->tenantId,
+            '%s/api/v1/addContact/%s?sourceType=%s',
+            $this->resolveTenantBaseUrl(),
             rawurlencode($phone),
             rawurlencode($this->sourceType)
         );
@@ -65,9 +72,8 @@ class WatiApi
     public function updateContactAttributes(string $phone, array $customParams): array
     {
         $url = sprintf(
-            '%s/%s/api/v1/updateContactAttributes/%s?sourceType=%s',
-            $this->baseUrl,
-            $this->tenantId,
+            '%s/api/v1/updateContactAttributes/%s?sourceType=%s',
+            $this->resolveTenantBaseUrl(),
             rawurlencode($phone),
             rawurlencode($this->sourceType)
         );
@@ -99,9 +105,8 @@ class WatiApi
     public function getContacts(int $pageSize = 100, int $pageNumber = 1): array
     {
         $url = sprintf(
-            '%s/%s/api/v1/getContacts',
-            $this->baseUrl,
-            $this->tenantId,
+            '%s/api/v1/getContacts',
+            $this->resolveTenantBaseUrl(),
         );
 
         $res = Http::timeout(20)
@@ -137,5 +142,29 @@ class WatiApi
             'has_more' => $hasMore,
             'raw' => $payload,
         ];
+    }
+
+    private function resolveTenantBaseUrl(): string
+    {
+        $normalizedBaseUrl = rtrim($this->baseUrl, '/');
+
+        if (str_ends_with($normalizedBaseUrl, '/' . $this->tenantId)) {
+            return $normalizedBaseUrl;
+        }
+
+        return $normalizedBaseUrl . '/' . $this->tenantId;
+    }
+
+    private static function extractTenantIdFromBaseUrl(string $baseUrl): string
+    {
+        $path = trim((string) parse_url($baseUrl, PHP_URL_PATH), '/');
+
+        if ($path === '') {
+            return '';
+        }
+
+        $parts = explode('/', $path);
+
+        return trim((string) end($parts));
     }
 }
