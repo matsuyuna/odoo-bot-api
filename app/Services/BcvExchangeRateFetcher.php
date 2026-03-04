@@ -5,10 +5,12 @@ namespace App\Services;
 use Carbon\CarbonImmutable;
 use DOMDocument;
 use DOMXPath;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 class BcvExchangeRateFetcher
 {
@@ -22,10 +24,7 @@ class BcvExchangeRateFetcher
     public function fetchUsdRate(): array
     {
         return Cache::remember('bcv.usd-rate.latest', now()->addMinutes(15), function (): array {
-            $exportResponse = Http::timeout(20)
-                ->retry(3, 500)
-                ->accept('*/*')
-                ->get(self::EXPORT_URL);
+            $exportResponse = $this->requestWithSslFallback(self::EXPORT_URL, '*/*', 3, 500);
 
             if ($exportResponse->successful()) {
                 $parsed = $this->parseResponse(
@@ -36,10 +35,7 @@ class BcvExchangeRateFetcher
                 return $parsed + ['source' => 'export', 'raw_content' => $exportResponse->body()];
             }
 
-            $fallbackResponse = Http::timeout(20)
-                ->retry(2, 700)
-                ->accept('text/html,application/xhtml+xml')
-                ->get(self::PAGE_URL);
+            $fallbackResponse = $this->requestWithSslFallback(self::PAGE_URL, 'text/html,application/xhtml+xml', 2, 700);
 
             if (!$fallbackResponse->successful()) {
                 throw new RuntimeException('BCV no respondió correctamente (export y fallback fallaron).');
@@ -49,6 +45,37 @@ class BcvExchangeRateFetcher
 
             return $parsed + ['source' => 'html_fallback', 'raw_content' => $fallbackResponse->body()];
         });
+    }
+
+    private function requestWithSslFallback(string $url, string $accept, int $retryTimes, int $sleepMs): Response
+    {
+        $request = Http::timeout(20)
+            ->retry($retryTimes, $sleepMs)
+            ->accept($accept);
+
+        try {
+            return $request->get($url);
+        } catch (Throwable $e) {
+            if (!$this->isSslCertIssue($e) || !$this->shouldUseInsecureSslFallback()) {
+                throw $e;
+            }
+
+            return Http::timeout(20)
+                ->retry(1, 200)
+                ->accept($accept)
+                ->withOptions(['verify' => false])
+                ->get($url);
+        }
+    }
+
+    private function shouldUseInsecureSslFallback(): bool
+    {
+        return filter_var((string) env('BCV_INSECURE_SSL_FALLBACK', 'true'), FILTER_VALIDATE_BOOL);
+    }
+
+    private function isSslCertIssue(Throwable $e): bool
+    {
+        return Str::contains(strtolower($e->getMessage()), 'curl error 60');
     }
 
     /**

@@ -34,6 +34,32 @@ class FetchBcvUsdRateCommandTest extends TestCase
         Storage::disk('local')->assertDirectoryEmpty('tmp');
     }
 
+    public function test_reintenta_sin_verificacion_ssl_si_ocurre_curl_error_60(): void
+    {
+        Cache::flush();
+        putenv('BCV_INSECURE_SSL_FALLBACK=true');
+
+        Http::fake(function () {
+            static $calls = 0;
+            $calls++;
+
+            if ($calls === 1) {
+                return Http::failedConnection('cURL error 60: SSL certificate problem: unable to get local issuer certificate');
+            }
+
+            return Http::response("Fecha;Moneda;Tasa\n06-03-2026;USD;438,0000", 200, ['Content-Type' => 'text/plain']);
+        });
+
+        $this->artisan('bcv:usd-rate:fetch')
+            ->assertSuccessful();
+
+        $this->assertDatabaseHas('bcv_exchange_rates', [
+            'rate_date' => '2026-03-06',
+            'usd_rate' => '438.0000',
+            'source' => 'export',
+        ]);
+    }
+
     public function test_hace_fallback_html_si_export_falla(): void
     {
         Cache::flush();
