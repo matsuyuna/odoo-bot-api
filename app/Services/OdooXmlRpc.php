@@ -216,6 +216,61 @@ class OdooXmlRpc
         return is_array($parsed) ? $parsed : [];
     }
 
+    /**
+     * Inspecciona un producto buscando por nombre y devuelve todos sus campos.
+     */
+    public function inspectProductByName(string $query): array
+    {
+        $query = trim($query);
+
+        if ($query === '') {
+            return [];
+        }
+
+        $pairs = $this->nameSearch('product.product', $query, 1);
+        $productId = $pairs[0][0] ?? null;
+
+        if (!is_int($productId) || $productId <= 0) {
+            return [];
+        }
+
+        $fields = $this->fieldsGet('product.product');
+        $fieldNames = array_keys($fields);
+        $records = $this->read('product.product', [$productId], $fieldNames);
+        $record = $records[0] ?? [];
+
+        $priceCandidates = [];
+        foreach ($fields as $fieldName => $meta) {
+            $label = mb_strtolower((string) ($meta['string'] ?? ''));
+            $name = mb_strtolower((string) $fieldName);
+            $type = (string) ($meta['type'] ?? '');
+            $looksLikePrice = str_contains($name, 'price')
+                || str_contains($name, 'cost')
+                || str_contains($label, 'precio')
+                || str_contains($label, 'price')
+                || str_contains($label, 'costo')
+                || in_array($type, ['monetary', 'float'], true);
+
+            if (!$looksLikePrice || !array_key_exists($fieldName, $record)) {
+                continue;
+            }
+
+            $priceCandidates[$fieldName] = [
+                'label' => $meta['string'] ?? $fieldName,
+                'type' => $type,
+                'value' => $record[$fieldName],
+            ];
+        }
+
+        return [
+            'id' => $productId,
+            'display_name' => $pairs[0][1] ?? null,
+            'fields' => $fields,
+            'record' => $record,
+            'price_candidates' => $priceCandidates,
+        ];
+    }
+
     
 
     public function findContactIdByPhoneOrEmail(?string $phone, ?string $email): ?int
@@ -344,6 +399,28 @@ class OdooXmlRpc
             'read',
             [$ids],
             ['fields' => $fields],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+
+        return is_array($parsed) ? $parsed : [];
+    }
+
+    private function fieldsGet(string $model): array
+    {
+        $uid = $this->getUid();
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            $model,
+            'fields_get',
+            [],
+            [
+                'attributes' => ['string', 'type', 'help', 'currency_field'],
+            ],
         ]);
 
         $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);

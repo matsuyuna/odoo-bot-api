@@ -20,6 +20,28 @@ class BotProductoControllerTest extends TestCase
         putenv('ODOO_STORE_LOCATION_IDS');
     }
 
+
+
+    public function test_inspeccionar_producto_devuelve_campos_y_posibles_precios(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->nameSearchXml(), 200)
+                ->push($this->productFieldsGetXml(), 200)
+                ->push($this->productInspectReadXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/inspeccionar-producto?nombre=acetaminofen');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('id', 501)
+            ->assertJsonPath('record.lst_price', 19.9)
+            ->assertJsonPath('record.x_price_bs', 745.2)
+            ->assertJsonPath('price_candidates.lst_price.value', 19.9)
+            ->assertJsonPath('price_candidates.x_price_bs.value', 745.2);
+    }
     public function test_buscar_producto_actualiza_custom_param_productos_en_wati(): void
     {
         putenv('WATI_BASE_URL=https://wati.test');
@@ -207,4 +229,71 @@ XML;
 </methodResponse>
 XML;
     }
+
+
+    private function productFieldsGetXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <struct>
+          <member>
+            <name>name</name>
+            <value><struct>
+              <member><name>string</name><value><string>Nombre</string></value></member>
+              <member><name>type</name><value><string>char</string></value></member>
+            </struct></value>
+          </member>
+          <member>
+            <name>lst_price</name>
+            <value><struct>
+              <member><name>string</name><value><string>Precio de Venta</string></value></member>
+              <member><name>type</name><value><string>float</string></value></member>
+            </struct></value>
+          </member>
+          <member>
+            <name>x_price_bs</name>
+            <value><struct>
+              <member><name>string</name><value><string>Precio Bs</string></value></member>
+              <member><name>type</name><value><string>float</string></value></member>
+            </struct></value>
+          </member>
+        </struct>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productInspectReadXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>501</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen 500mg</string></value></member>
+                <member><name>lst_price</name><value><double>19.9</double></value></member>
+                <member><name>x_price_bs</name><value><double>745.2</double></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
 }
