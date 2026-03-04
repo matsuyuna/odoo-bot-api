@@ -236,8 +236,11 @@ class OdooXmlRpc
 
         $fields = $this->fieldsGet('product.product');
         $fieldNames = array_keys($fields);
-        $records = $this->read('product.product', [$productId], $fieldNames);
-        $record = $records[0] ?? [];
+        ['record' => $record, 'unreadable_fields' => $unreadableFields] = $this->readRecordSafely(
+            'product.product',
+            $productId,
+            $fieldNames,
+        );
 
         $priceCandidates = [];
         foreach ($fields as $fieldName => $meta) {
@@ -267,11 +270,71 @@ class OdooXmlRpc
             'display_name' => $pairs[0][1] ?? null,
             'fields' => $fields,
             'record' => $record,
+            'unreadable_fields' => $unreadableFields,
             'price_candidates' => $priceCandidates,
         ];
     }
 
-    
+    /**
+     * Lee un registro tolerando campos dañados/incompatibles de Odoo.
+     * Devuelve los campos legibles y la lista de campos que fallaron al leer.
+     *
+     * @param string[] $fieldNames
+     * @return array{record: array<string,mixed>, unreadable_fields: string[]}
+     */
+    private function readRecordSafely(string $model, int $id, array $fieldNames): array
+    {
+        $record = [];
+        $unreadable = [];
+
+        foreach (array_chunk($fieldNames, 25) as $chunk) {
+            ['record' => $chunkRecord, 'unreadable_fields' => $chunkUnreadable] = $this->readFieldsChunkSafely($model, $id, $chunk);
+            $record = array_merge($record, $chunkRecord);
+            $unreadable = array_merge($unreadable, $chunkUnreadable);
+        }
+
+        $record['id'] = $id;
+
+        return [
+            'record' => $record,
+            'unreadable_fields' => array_values(array_unique($unreadable)),
+        ];
+    }
+
+    /**
+     * @param string[] $fields
+     * @return array{record: array<string,mixed>, unreadable_fields: string[]}
+     */
+    private function readFieldsChunkSafely(string $model, int $id, array $fields): array
+    {
+        if (empty($fields)) {
+            return ['record' => [], 'unreadable_fields' => []];
+        }
+
+        try {
+            $rows = $this->read($model, [$id], $fields);
+            return [
+                'record' => is_array($rows[0] ?? null) ? $rows[0] : [],
+                'unreadable_fields' => [],
+            ];
+        } catch (RuntimeException $e) {
+            if (count($fields) === 1) {
+                return ['record' => [], 'unreadable_fields' => $fields];
+            }
+
+            $middle = (int) floor(count($fields) / 2);
+            $left = array_slice($fields, 0, $middle);
+            $right = array_slice($fields, $middle);
+
+            ['record' => $leftRecord, 'unreadable_fields' => $leftUnreadable] = $this->readFieldsChunkSafely($model, $id, $left);
+            ['record' => $rightRecord, 'unreadable_fields' => $rightUnreadable] = $this->readFieldsChunkSafely($model, $id, $right);
+
+            return [
+                'record' => array_merge($leftRecord, $rightRecord),
+                'unreadable_fields' => array_merge($leftUnreadable, $rightUnreadable),
+            ];
+        }
+    }
 
     public function findContactIdByPhoneOrEmail(?string $phone, ?string $email): ?int
     {
