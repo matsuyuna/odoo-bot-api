@@ -52,6 +52,34 @@ class BotProductoController extends Controller
         }
     }
 
+    public function inspeccionar(Request $request)
+    {
+        $nombre = trim($request->query('nombre', ''));
+
+        if ($nombre === '') {
+            return response()->json(['error' => 'Falta el parámetro "nombre"'], 400);
+        }
+
+        try {
+            $odoo = OdooXmlRpc::fromEnv();
+            $inspeccion = $odoo->inspectProductByName($nombre);
+
+            if (empty($inspeccion)) {
+                return response()->json([
+                    'message' => 'No se encontró producto para inspeccionar.',
+                    'query' => $nombre,
+                ], 404);
+            }
+
+            return response()->json($inspeccion);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => 'Error inspeccionando producto en Odoo',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     private function actualizarProductosEnWati(Request $request, array $productos): void
     {
         $whatsappNumber = trim((string) (
