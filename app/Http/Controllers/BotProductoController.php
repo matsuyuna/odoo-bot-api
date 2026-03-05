@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BcvRate;
 use App\Services\OdooXmlRpc;
 use App\Services\WatiApi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class BotProductoController extends Controller
 {
@@ -20,10 +22,15 @@ class BotProductoController extends Controller
         try {
             $odoo = OdooXmlRpc::fromEnv();
             $productos = $odoo->searchProductsSmart($nombre, 7);
+            $latestRate = $this->getLatestBcvRate();
 
-            $respuesta = array_map(function (array $producto) {
+            $respuesta = array_map(function (array $producto) use ($latestRate) {
                 $qtyAvailable = (float) ($producto['qty_available'] ?? 0);
                 $price = (float) ($producto['price'] ?? 0);
+                $precioBcv = is_null($latestRate) ? null : round($price * $latestRate, 2);
+                $precioEnTexto = is_null($precioBcv)
+                    ? 'No disponible'
+                    : number_format((float) round($precioBcv), 0, ',', '.') . ' Bs';
 
                 return [
                     'id' => $producto['id'] ?? null,
@@ -32,11 +39,12 @@ class BotProductoController extends Controller
                     'barcode' => $producto['barcode'] ?? null,
                     'qty_available' => $qtyAvailable,
                     'price' => $price,
+                    'precio_bcv' => $precioBcv,
                     'availability_text' => sprintf(
-                        '%s - %s - Precio: %.2f',
+                        '%s - %s - Precio: %s',
                         $producto['name'] ?? 'Producto sin nombre',
                         $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
-                        $price,
+                        $precioEnTexto,
                     ),
                 ];
             }, array_slice($productos, 0, 7));
@@ -49,6 +57,21 @@ class BotProductoController extends Controller
                 'error' => 'Error consultando Odoo',
                 'message' => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    private function getLatestBcvRate(): ?float
+    {
+        try {
+            $rate = BcvRate::query()->latest('date')->value('dollar');
+
+            return is_null($rate) ? null : (float) $rate;
+        } catch (Throwable $e) {
+            Log::warning('No se pudo cargar la última tasa BCV.', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
         }
     }
 
