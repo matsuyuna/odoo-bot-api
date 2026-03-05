@@ -16,7 +16,11 @@ class SyncBcvRateCommand extends Command
 
     public function handle(): int
     {
-        $rateUrls = config('services.bcv.rate_urls', ['https://bcv-api.rafnixg.dev/rates/']);
+        $rateUrls = config('services.bcv.rate_urls', [
+            'https://bcv-api.rafnixg.dev/rates/',
+            'https://bcv-api.rafnixg.dev/api/rates',
+            'https://bcv-api.rafnixg.dev/api/rates/latest',
+        ]);
         $response = null;
         $lastStatus = null;
 
@@ -41,14 +45,14 @@ class SyncBcvRateCommand extends Command
             throw new RuntimeException('No se pudo consultar la tasa BCV. Status: ' . ($lastStatus ?? 'N/A'));
         }
 
-        $data = $response->json();
+        $parsedRate = $this->extractRatePayload($response->json());
 
-        $date = $data['date'] ?? null;
-        $dollar = $data['dollar'] ?? null;
-
-        if (!is_string($date) || !is_numeric($dollar)) {
+        if (!is_array($parsedRate)) {
             throw new RuntimeException('Respuesta inválida del API BCV.');
         }
+
+        $date = $parsedRate['date'];
+        $dollar = $parsedRate['dollar'];
 
         BcvRate::query()->updateOrCreate(
             ['date' => $date],
@@ -58,5 +62,45 @@ class SyncBcvRateCommand extends Command
         $this->info(sprintf('Tasa BCV sincronizada para %s: %.4f', $date, (float) $dollar));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @return array{date:string,dollar:float}|null
+     */
+    private function extractRatePayload(mixed $payload): ?array
+    {
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $candidates = [
+            $payload,
+            $payload['data'] ?? null,
+            $payload['rates'] ?? null,
+            $payload['result'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (!is_array($candidate)) {
+                continue;
+            }
+
+            $date = $candidate['date'] ?? $payload['date'] ?? null;
+            $dollar = $candidate['dollar']
+                ?? $candidate['usd']
+                ?? $candidate['USD']
+                ?? ($candidate['usd']['value'] ?? null)
+                ?? ($candidate['USD']['value'] ?? null)
+                ?? ($candidate['dollar']['value'] ?? null);
+
+            if (is_string($date) && is_numeric($dollar)) {
+                return [
+                    'date' => $date,
+                    'dollar' => (float) $dollar,
+                ];
+            }
+        }
+
+        return null;
     }
 }
