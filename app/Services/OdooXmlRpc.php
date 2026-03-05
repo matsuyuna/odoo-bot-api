@@ -161,7 +161,7 @@ class OdooXmlRpc
 
         $out = [];
         foreach ($rows as $r) {
-            $phone = $r['mobile'] ?? $r['phone'] ?? null;
+            $phone = $r['phone'] ?? $r['mobile'] ?? null;
             $out[] = [
                 'id' => $r['id'] ?? null,
                 'name' => $r['name'] ?? null,
