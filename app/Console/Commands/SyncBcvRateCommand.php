@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\BcvRate;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -15,15 +16,29 @@ class SyncBcvRateCommand extends Command
 
     public function handle(): int
     {
-        $response = Http::acceptJson()
-            ->withHeaders([
-                'User-Agent' => 'odoo-bot-api/1.0',
-            ])
-            ->timeout(20)
-            ->get('https://bcv-api.rafnixg.dev/rates/');
+        $rateUrls = config('services.bcv.rate_urls', ['https://bcv-api.rafnixg.dev/rates/']);
+        $response = null;
+        $lastStatus = null;
 
-        if (!$response->successful()) {
-            throw new RuntimeException('No se pudo consultar la tasa BCV. Status: ' . $response->status());
+        foreach ($rateUrls as $rateUrl) {
+            $currentResponse = Http::acceptJson()
+                ->withHeaders([
+                    'User-Agent' => 'odoo-bot-api/1.0',
+                ])
+                ->timeout(20)
+                ->get($rateUrl);
+
+            if ($currentResponse->successful()) {
+                $response = $currentResponse;
+
+                break;
+            }
+
+            $lastStatus = $currentResponse->status();
+        }
+
+        if (!$response instanceof Response) {
+            throw new RuntimeException('No se pudo consultar la tasa BCV. Status: ' . ($lastStatus ?? 'N/A'));
         }
 
         $data = $response->json();
