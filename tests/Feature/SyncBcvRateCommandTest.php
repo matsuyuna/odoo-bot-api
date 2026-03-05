@@ -34,6 +34,31 @@ class SyncBcvRateCommandTest extends TestCase
         $this->assertSame(1, BcvRate::query()->count());
     }
 
+    public function test_sync_bcv_rate_command_accepts_nested_payload_shape(): void
+    {
+        config()->set('services.bcv.rate_urls', ['https://bcv-api.rafnixg.dev/api/rates/latest']);
+
+        Http::fake([
+            'https://bcv-api.rafnixg.dev/api/rates/latest' => Http::response([
+                'data' => [
+                    'date' => '2026-03-06',
+                    'usd' => [
+                        'value' => 431.4501,
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $this->artisan('bcv:rates:sync')
+            ->expectsOutput('Tasa BCV sincronizada para 2026-03-06: 431.4501')
+            ->assertSuccessful();
+
+        $this->assertDatabaseHas('bcv_rates', [
+            'date' => '2026-03-06',
+            'dollar' => 431.4501,
+        ]);
+    }
+
     public function test_sync_bcv_rate_command_tries_next_url_when_first_fails(): void
     {
         config()->set('services.bcv.rate_urls', [
