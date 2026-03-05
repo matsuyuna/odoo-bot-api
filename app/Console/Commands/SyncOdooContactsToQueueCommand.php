@@ -6,6 +6,7 @@ use App\Models\OdooContactSync;
 use App\Services\OdooXmlRpc;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Mail;
 
 class SyncOdooContactsToQueueCommand extends Command
 {
@@ -19,11 +20,17 @@ class SyncOdooContactsToQueueCommand extends Command
     {
         $batchSize = max(1, min((int) $this->option('batch-size'), 1000));
         $maxTotal = max(0, (int) $this->option('max-total'));
+        $failed = 0;
+        $failureReasons = [];
 
         try {
             $odoo = OdooXmlRpc::fromEnv();
         } catch (\Throwable $e) {
             $this->error('Error consultando Odoo: ' . $e->getMessage());
+            $this->sendFailureSummaryEmail([
+                'No se pudo inicializar la conexión con Odoo: ' . $e->getMessage(),
+            ]);
+
             return self::FAILURE;
         }
 
@@ -38,6 +45,10 @@ class SyncOdooContactsToQueueCommand extends Command
                 $rows = $odoo->fetchRecentContacts($batchSize, $offset);
             } catch (\Throwable $e) {
                 $this->error('Error consultando lote en Odoo (offset ' . $offset . '): ' . $e->getMessage());
+                $this->sendFailureSummaryEmail(array_merge($failureReasons, [
+                    'Error consultando lote en Odoo (offset ' . $offset . '): ' . $e->getMessage(),
+                ]));
+
                 return self::FAILURE;
             }
 
@@ -63,11 +74,17 @@ class SyncOdooContactsToQueueCommand extends Command
                     'email' => $r['email'] ?? null,
                     'phone' => $r['phone'] ?? null,
                     'mobile' => $r['mobile'] ?? null,
-                    'preferred_whatsapp' => $this->normalizePhone($r['mobile'] ?? $r['phone'] ?? null),
+                    'preferred_whatsapp' => $this->normalizePhone($r['phone'] ?? $r['mobile'] ?? null),
                     'vat' => $r['vat'] ?? null,
                     'is_company' => (bool) ($r['is_company'] ?? false),
                     'odoo_write_date' => $this->parseDate($r['write_date'] ?? null),
                 ];
+
+                if (!$payload['preferred_whatsapp']) {
+                    $failed++;
+                    $failureReasons[] = 'Contacto Odoo ID ' . $odooId . ' sin phone/mobile válido; no se sincronizó.';
+                    continue;
+                }
 
                 /** @var OdooContactSync|null $existing */
                 $existing = OdooContactSync::query()->where('odoo_contact_id', $odooId)->first();
@@ -99,6 +116,11 @@ class SyncOdooContactsToQueueCommand extends Command
             }
         }
 
+        if ($failed > 0) {
+            $this->warn("Contactos omitidos por datos inválidos: {$failed}");
+            $this->sendFailureSummaryEmail($failureReasons);
+        }
+
         $this->info("Contactos procesados desde Odoo. Total: {$processed}, nuevos: {$created}, actualizados: {$updated}");
 
         return self::SUCCESS;
@@ -125,6 +147,28 @@ class SyncOdooContactsToQueueCommand extends Command
             return Carbon::parse($value);
         } catch (\Throwable) {
             return null;
+        }
+    }
+
+    /** @param array<int, string> $failureReasons */
+    private function sendFailureSummaryEmail(array $failureReasons): void
+    {
+        $recipient = trim((string) config('services.odoo.sync_failure_email'));
+
+        if ($recipient === '' || empty($failureReasons)) {
+            return;
+        }
+
+        $subject = '[' . config('app.name') . '] Fallos en cron odoo:contacts:pull';
+        $body = "Se detectaron fallos durante la sincronización de contactos de Odoo hacia WATI.\n\n";
+        $body .= "Resumen:\n- " . implode("\n- ", array_values(array_unique($failureReasons)));
+
+        try {
+            Mail::raw($body, function ($message) use ($recipient, $subject) {
+                $message->to($recipient)->subject($subject);
+            });
+        } catch (\Throwable $e) {
+            $this->error('No se pudo enviar el correo de fallos: ' . $e->getMessage());
         }
     }
 }
