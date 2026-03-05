@@ -87,6 +87,7 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonCount(2)
             ->assertJsonPath('0.name', 'Acetaminofen 500mg')
             ->assertJsonPath('0.price', 19.9)
+            ->assertJsonPath('0.availability_text', 'Acetaminofen 500mg - Si hay disponible - Precio: 19.90')
             ->assertJsonPath('1.name', 'Acetaminofen Infantil')
             ->assertJsonPath('1.price', 12.4);
 
