@@ -52,7 +52,8 @@ class SyncWatiContactsToOdooCommand extends Command
             foreach ($contacts as $row) {
                 $name = $this->pickString($row, ['name', 'fullName', 'contactName']) ?? 'Sin nombre';
                 $email = $this->pickString($row, ['email']);
-                $phone = $this->normalizePhone($this->pickString($row, ['whatsappNumber', 'phone', 'phone_number', 'mobile']));
+                $watiPhone = $this->normalizePhone($this->pickString($row, ['whatsappNumber', 'phone', 'phone_number', 'mobile']));
+                $phone = $this->formatForOdoo($watiPhone);
 
                 if (!$phone) {
                     continue;
@@ -138,5 +139,30 @@ class SyncWatiContactsToOdooCommand extends Command
         $normalized = preg_replace('/[^\d+]/', '', trim($value));
 
         return $normalized ?: null;
+    }
+
+    private function formatForOdoo(?string $phone): ?string
+    {
+        if (!$phone) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D/', '', $phone) ?? '';
+        if ($digits === '') {
+            return null;
+        }
+
+        if (str_starts_with($digits, '58')) {
+            $rest = substr($digits, 2) ?: '';
+            $rest = ltrim($rest, '0');
+
+            if ($rest === '') {
+                return null;
+            }
+
+            return '0' . $rest;
+        }
+
+        return $phone;
     }
 }
