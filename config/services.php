@@ -42,4 +42,11 @@ return [
         'sync_failure_email' => env('ODOO_SYNC_FAILURE_EMAIL'),
     ],
 
+    'bcv' => [
+        'rate_urls' => array_filter(array_map(
+            static fn (string $url): string => trim($url),
+            explode(',', (string) env('BCV_RATE_URLS', 'https://bcv-api.rafnixg.dev/rates/')),
+        )),
+    ],
+
 ];
