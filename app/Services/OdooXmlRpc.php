@@ -202,7 +202,7 @@ class OdooXmlRpc
             'search_read',
             [$domain],
             [
-                'fields' => ['id', 'name', 'email', 'phone', 'mobile', 'vat', 'is_company', 'write_date', 'create_date'],
+                'fields' => ['id', 'name', 'email', 'phone', 'mobile', 'vat', 'is_company', 'write_date', 'create_date', 'country_id'],
                 'limit' => $limit,
                 'offset' => $offset,
                 // Orden estable para paginación con offset

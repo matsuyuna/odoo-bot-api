@@ -74,7 +74,10 @@ class SyncOdooContactsToQueueCommand extends Command
                     'email' => $r['email'] ?? null,
                     'phone' => $r['phone'] ?? null,
                     'mobile' => $r['mobile'] ?? null,
-                    'preferred_whatsapp' => $this->normalizePhone($r['phone'] ?? $r['mobile'] ?? null),
+                    'preferred_whatsapp' => $this->normalizePhone(
+                        $r['phone'] ?? $r['mobile'] ?? null,
+                        $this->isVenezuelanContact($r)
+                    ),
                     'vat' => $r['vat'] ?? null,
                     'is_company' => (bool) ($r['is_company'] ?? false),
                     'odoo_write_date' => $this->parseDate($r['write_date'] ?? null),
@@ -126,7 +129,7 @@ class SyncOdooContactsToQueueCommand extends Command
         return self::SUCCESS;
     }
 
-    private function normalizePhone(?string $value): ?string
+    private function normalizePhone(?string $value, bool $isVenezuelan = false): ?string
     {
         if (!$value) {
             return null;
@@ -134,7 +137,41 @@ class SyncOdooContactsToQueueCommand extends Command
 
         $normalized = preg_replace('/[^\d+]/', '', trim($value));
 
-        return $normalized ?: null;
+        if (!$normalized) {
+            return null;
+        }
+
+        if (!$isVenezuelan) {
+            return $normalized;
+        }
+
+        $digits = preg_replace('/\D/', '', $normalized) ?? '';
+        if ($digits === '') {
+            return null;
+        }
+
+        if (str_starts_with($digits, '58')) {
+            $digits = substr($digits, 2) ?: '';
+        }
+
+        $digits = ltrim($digits, '0');
+
+        if ($digits === '') {
+            return null;
+        }
+
+        return '+58' . $digits;
+    }
+
+    private function isVenezuelanContact(array $row): bool
+    {
+        $country = $row['country_id'] ?? null;
+
+        if (!is_array($country) || !isset($country[1]) || !is_string($country[1])) {
+            return false;
+        }
+
+        return str_contains(mb_strtolower($country[1]), 'venezuela');
     }
 
     private function parseDate(mixed $value): ?Carbon
