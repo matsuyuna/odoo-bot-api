@@ -35,7 +35,7 @@ class BotProductoController extends Controller
                     'availability_text' => sprintf(
                         '%s - %s - Precio: %.2f',
                         $producto['name'] ?? 'Producto sin nombre',
-                        $qtyAvailable > 0 ? 'Si hay disponible' : 'no hay disponible',
+                        $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
                         $price,
                     ),
                 ];
