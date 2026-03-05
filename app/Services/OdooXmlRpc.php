@@ -217,6 +217,59 @@ class OdooXmlRpc
     }
 
     /**
+     * Audita si en res.partner hay campos útiles para identificar país de origen del teléfono.
+     *
+     * @return array{fields_available: string[], inspected_contacts: array<int, array<string,mixed>>}
+     */
+    public function inspectPhoneCountryFields(int $limit = 10): array
+    {
+        $limit = max(1, min($limit, 100));
+        $allFields = $this->fieldsGet('res.partner');
+
+        $candidateFields = [
+            'id',
+            'name',
+            'phone',
+            'mobile',
+            'country_id',
+            'phone_country_code',
+            'phone_sanitized',
+            'mobile_sanitized',
+        ];
+
+        $availableFields = [];
+        foreach ($candidateFields as $field) {
+            if ($field === 'id' || array_key_exists($field, $allFields)) {
+                $availableFields[] = $field;
+            }
+        }
+
+        $uid = $this->getUid();
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            'res.partner',
+            'search_read',
+            [[['active', '=', true]]],
+            [
+                'fields' => $availableFields,
+                'limit' => $limit,
+                'order' => 'id desc',
+            ],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+        $rows = is_array($parsed) ? $parsed : [];
+
+        return [
+            'fields_available' => $availableFields,
+            'inspected_contacts' => $rows,
+        ];
+    }
+
+    /**
      * Inspecciona un producto buscando por nombre y devuelve todos sus campos.
      */
     public function inspectProductByName(string $query): array
