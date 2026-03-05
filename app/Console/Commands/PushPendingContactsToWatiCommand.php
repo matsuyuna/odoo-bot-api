@@ -40,14 +40,16 @@ class PushPendingContactsToWatiCommand extends Command
 
         $sent = 0;
         $failed = 0;
+        $failureReasons = [];
 
         foreach ($contacts as $contact) {
-            $phone = $contact->preferred_whatsapp;
+            $phone = $this->normalizePhoneForWati($contact->preferred_whatsapp);
             if (!$phone) {
                 $contact->wati_status = 'error';
-                $contact->last_error = 'Contacto sin teléfono/móvil para enviar a WATI.';
+                $contact->last_error = 'Teléfono inválido o ausente para WATI (debe tener entre 8 y 15 dígitos).';
                 $contact->save();
                 $failed++;
+                $failureReasons[$contact->last_error] = ($failureReasons[$contact->last_error] ?? 0) + 1;
                 continue;
             }
 
@@ -74,11 +76,52 @@ class PushPendingContactsToWatiCommand extends Command
                 $contact->last_error = $e->getMessage();
                 $contact->save();
                 $failed++;
+                $reason = $this->normalizeFailureReason($e->getMessage());
+                $failureReasons[$reason] = ($failureReasons[$reason] ?? 0) + 1;
             }
         }
 
         $this->info("Sincronización WATI finalizada. Enviados: {$sent}, fallidos: {$failed}");
 
+        if ($failed > 0) {
+            arsort($failureReasons);
+            $this->newLine();
+            $this->warn('Motivos de fallo detectados:');
+            foreach ($failureReasons as $reason => $count) {
+                $this->line("- ({$count}) {$reason}");
+            }
+        }
+
         return self::SUCCESS;
+    }
+
+    private function normalizePhoneForWati(?string $phone): ?string
+    {
+        if (!$phone) {
+            return null;
+        }
+
+        $digitsOnly = preg_replace('/\D+/', '', $phone);
+        if (!$digitsOnly) {
+            return null;
+        }
+
+        $len = strlen($digitsOnly);
+
+        return $len >= 8 && $len <= 15 ? $digitsOnly : null;
+    }
+
+    private function normalizeFailureReason(string $message): string
+    {
+        $message = trim($message);
+        if ($message === '') {
+            return 'Error desconocido';
+        }
+
+        if (strlen($message) > 180) {
+            return substr($message, 0, 180) . '...';
+        }
+
+        return $message;
     }
 }
