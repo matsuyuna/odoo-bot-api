@@ -2,12 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Models\BcvRate;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class BotProductoControllerTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -67,6 +71,11 @@ class BotProductoControllerTest extends TestCase
     }
     public function test_buscar_producto_actualiza_custom_param_productos_en_wati(): void
     {
+        BcvRate::query()->create([
+            'date' => '2026-03-04',
+            'dollar' => 427.9302,
+        ]);
+
         putenv('WATI_BASE_URL=https://wati.test');
         putenv('WATI_TENANT_ID=tenant123');
         putenv('WATI_TOKEN=token123');
@@ -87,9 +96,11 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonCount(2)
             ->assertJsonPath('0.name', 'Acetaminofen 500mg')
             ->assertJsonPath('0.price', 19.9)
-            ->assertJsonPath('0.availability_text', 'Acetaminofen 500mg - Si hay disponible - Precio: 19.90')
+            ->assertJsonPath('0.precio_bcv', 8515.81098)
+            ->assertJsonPath('0.availability_text', 'Acetaminofen 500mg - Si hay disponible - Precio: 8.516 Bs')
             ->assertJsonPath('1.name', 'Acetaminofen Infantil')
-            ->assertJsonPath('1.price', 12.4);
+            ->assertJsonPath('1.price', 12.4)
+            ->assertJsonPath('1.availability_text', 'Acetaminofen Infantil - Si hay disponible - Precio: 5.306 Bs');
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/api/v1/updateContactAttributes/584001112233')
