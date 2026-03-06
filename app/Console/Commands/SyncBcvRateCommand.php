@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\BcvRate;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -23,14 +24,23 @@ class SyncBcvRateCommand extends Command
         ]);
         $response = null;
         $lastStatus = null;
+        $lastError = null;
 
         foreach ($rateUrls as $rateUrl) {
-            $currentResponse = Http::acceptJson()
-                ->withHeaders([
-                    'User-Agent' => 'odoo-bot-api/1.0',
-                ])
-                ->timeout(20)
-                ->get($rateUrl);
+            try {
+                $currentResponse = Http::acceptJson()
+                    ->withHeaders([
+                        'User-Agent' => 'Mozilla/5.0 (compatible; odoo-bot-api/1.0; +https://example.com)',
+                    ])
+                    ->timeout(20)
+                    ->retry(2, 300, throw: false)
+                    ->get($rateUrl);
+            } catch (ConnectionException $e) {
+                $lastError = sprintf('Fallo de conexión consultando %s: %s', $rateUrl, $e->getMessage());
+                $this->warn($lastError);
+
+                continue;
+            }
 
             if ($currentResponse->successful()) {
                 $response = $currentResponse;
@@ -39,10 +49,21 @@ class SyncBcvRateCommand extends Command
             }
 
             $lastStatus = $currentResponse->status();
+            $lastError = sprintf(
+                'Respuesta no exitosa en %s (HTTP %s): %s',
+                $rateUrl,
+                $currentResponse->status(),
+                substr(trim($currentResponse->body()), 0, 200)
+            );
+            $this->warn($lastError);
         }
 
         if (!$response instanceof Response) {
-            throw new RuntimeException('No se pudo consultar la tasa BCV. Status: ' . ($lastStatus ?? 'N/A'));
+            throw new RuntimeException(
+                'No se pudo consultar la tasa BCV. Status: '
+                . ($lastStatus ?? 'N/A')
+                . ($lastError ? ' | Detalle: ' . $lastError : '')
+            );
         }
 
         $parsedRate = $this->extractRatePayload($response->json());
