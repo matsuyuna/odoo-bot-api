@@ -7,6 +7,7 @@ use Illuminate\Console\Command;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Throwable;
 
 class SyncBcvRateCommand extends Command
 {
@@ -23,14 +24,23 @@ class SyncBcvRateCommand extends Command
         ]);
         $response = null;
         $lastStatus = null;
+        $lastError = null;
 
         foreach ($rateUrls as $rateUrl) {
-            $currentResponse = Http::acceptJson()
-                ->withHeaders([
-                    'User-Agent' => 'odoo-bot-api/1.0',
-                ])
-                ->timeout(20)
-                ->get($rateUrl);
+            try {
+                $currentResponse = Http::acceptJson()
+                    ->withHeaders([
+                        'User-Agent' => 'odoo-bot-api/1.0',
+                    ])
+                    ->timeout(20)
+                    ->retry(2, 300)
+                    ->get($rateUrl);
+            } catch (Throwable $e) {
+                $lastError = $e->getMessage();
+                $this->warn(sprintf('Fallo de conexión consultando %s: %s', $rateUrl, $e->getMessage()));
+
+                continue;
+            }
 
             if ($currentResponse->successful()) {
                 $response = $currentResponse;
@@ -42,7 +52,11 @@ class SyncBcvRateCommand extends Command
         }
 
         if (!$response instanceof Response) {
-            throw new RuntimeException('No se pudo consultar la tasa BCV. Status: ' . ($lastStatus ?? 'N/A'));
+            throw new RuntimeException(
+                'No se pudo consultar la tasa BCV. Status: '
+                . ($lastStatus ?? 'N/A')
+                . ($lastError ? ' | Último error: ' . $lastError : '')
+            );
         }
 
         $parsedRate = $this->extractRatePayload($response->json());
