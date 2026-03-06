@@ -19,9 +19,7 @@ class SyncBcvRateCommand extends Command
     public function handle(): int
     {
         $rateUrls = config('services.bcv.rate_urls', [
-            'https://bcv-api.rafnixg.dev/rates/',
-            'https://bcv-api.rafnixg.dev/api/rates',
-            'https://bcv-api.rafnixg.dev/api/rates/latest',
+            'https://api-bcv-pi.vercel.app/api/tasa',
         ]);
         $response = null;
         $lastStatus = null;
@@ -107,13 +105,18 @@ class SyncBcvRateCommand extends Command
                 continue;
             }
 
-            $date = $candidate['date'] ?? $payload['date'] ?? null;
+            $date = $candidate['date'] ?? $candidate['fecha'] ?? $payload['date'] ?? $payload['fecha'] ?? null;
             $dollar = $candidate['dollar']
                 ?? $candidate['usd']
                 ?? $candidate['USD']
+                ?? $candidate['tasa']
+                ?? $candidate['rate']
+                ?? $candidate['valor']
                 ?? ($candidate['usd']['value'] ?? null)
                 ?? ($candidate['USD']['value'] ?? null)
-                ?? ($candidate['dollar']['value'] ?? null);
+                ?? ($candidate['dollar']['value'] ?? null)
+                ?? ($candidate['tasa']['value'] ?? null)
+                ?? ($candidate['rate']['value'] ?? null);
 
             if (is_string($date) && is_numeric($dollar)) {
                 return [
