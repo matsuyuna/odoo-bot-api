@@ -13,12 +13,16 @@ class SyncBcvRateCommandTest extends TestCase
 
     public function test_sync_bcv_rate_command_stores_latest_rate(): void
     {
-        config()->set('services.bcv.rate_urls', ['https://api-bcv-pi.vercel.app/api/tasa/usd']);
+        config()->set('services.bcv.rate_urls', ['https://api-bcv-pi.vercel.app/api/tasa']);
 
         Http::fake([
-            'https://api-bcv-pi.vercel.app/api/tasa/usd' => Http::response([
-                'valor' => ['valor_num' => 427.9302],
-                'fecha' => '2026-03-04',
+            'https://api-bcv-pi.vercel.app/api/tasa' => Http::response([
+                'fecha_iso' => '2026-03-04',
+                'tasas' => [
+                    'USD' => [
+                        'valor_num' => 427.9302,
+                    ],
+                ],
             ], 200),
         ]);
 
@@ -36,13 +40,13 @@ class SyncBcvRateCommandTest extends TestCase
 
     public function test_sync_bcv_rate_command_accepts_nested_payload_shape(): void
     {
-        config()->set('services.bcv.rate_urls', ['https://api-bcv-pi.vercel.app/api/tasa/usd']);
+        config()->set('services.bcv.rate_urls', ['https://api-bcv-pi.vercel.app/api/tasa']);
 
         Http::fake([
-            'https://api-bcv-pi.vercel.app/api/tasa/usd' => Http::response([
+            'https://api-bcv-pi.vercel.app/api/tasa' => Http::response([
+                'fecha_iso' => '2026-03-06',
                 'valor' => [
                     'valor_num' => 431.4501,
-                    'fecha' => '2026-03-06',
                 ],
             ], 200),
         ]);

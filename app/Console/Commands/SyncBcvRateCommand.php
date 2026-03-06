@@ -19,7 +19,7 @@ class SyncBcvRateCommand extends Command
     public function handle(): int
     {
         $rateUrls = config('services.bcv.rate_urls', [
-            'https://api-bcv-pi.vercel.app/api/tasa/usd',
+            'https://api-bcv-pi.vercel.app/api/tasa',
         ]);
         $response = null;
         $lastStatus = null;
@@ -32,7 +32,7 @@ class SyncBcvRateCommand extends Command
                         'User-Agent' => 'Mozilla/5.0 (compatible; odoo-bot-api/1.0; +https://example.com)',
                     ])
                     ->timeout(20)
-                    ->retry(2, 300, throw: false)
+                    ->retry(3, 1000, throw: false)
                     ->get($rateUrl);
             } catch (ConnectionException $e) {
                 $lastError = sprintf('Fallo de conexión consultando %s: %s', $rateUrl, $e->getMessage());
@@ -68,7 +68,10 @@ class SyncBcvRateCommand extends Command
         $parsedRate = $this->extractRatePayload($response->json());
 
         if (!is_array($parsedRate)) {
-            throw new RuntimeException('Respuesta inválida del API BCV.');
+            throw new RuntimeException(
+                'Respuesta inválida del API BCV. JSON recibido: '
+                . json_encode($response->json(), JSON_UNESCAPED_UNICODE)
+            );
         }
 
         $date = $parsedRate['date'];
@@ -93,46 +96,36 @@ class SyncBcvRateCommand extends Command
             return null;
         }
 
-        $candidates = [
-            $payload,
-            $payload['data'] ?? null,
-            $payload['rates'] ?? null,
-            $payload['result'] ?? null,
-        ];
+        // Formato legado: { "date": "...", "dollar": 123.45 }
+        if (isset($payload['date'], $payload['dollar']) && is_numeric($payload['dollar'])) {
+            return [
+                'date' => (string) $payload['date'],
+                'dollar' => (float) $payload['dollar'],
+            ];
+        }
 
-        foreach ($candidates as $candidate) {
-            if (!is_array($candidate)) {
-                continue;
-            }
+        // Formato api-bcv-pi /api/tasa: { "fecha_iso": "...", "tasas": { "USD": { "valor_num": 123.45 } } }
+        if (
+            isset($payload['fecha_iso'])
+            && isset($payload['tasas']['USD']['valor_num'])
+            && is_numeric($payload['tasas']['USD']['valor_num'])
+        ) {
+            return [
+                'date' => (string) $payload['fecha_iso'],
+                'dollar' => (float) $payload['tasas']['USD']['valor_num'],
+            ];
+        }
 
-            $date = $candidate['date']
-                ?? $candidate['fecha']
-                ?? ($candidate['valor']['fecha'] ?? null)
-                ?? $payload['date']
-                ?? $payload['fecha']
-                ?? ($payload['valor']['fecha'] ?? null)
-                ?? now()->toDateString();
-
-            $dollar = $candidate['dollar']
-                ?? $candidate['usd']
-                ?? $candidate['USD']
-                ?? $candidate['tasa']
-                ?? $candidate['rate']
-                ?? $candidate['valor']
-                ?? ($candidate['usd']['value'] ?? null)
-                ?? ($candidate['USD']['value'] ?? null)
-                ?? ($candidate['dollar']['value'] ?? null)
-                ?? ($candidate['tasa']['value'] ?? null)
-                ?? ($candidate['rate']['value'] ?? null)
-                ?? ($candidate['valor']['value'] ?? null)
-                ?? ($candidate['valor']['valor_num'] ?? null);
-
-            if (is_string($date) && is_numeric($dollar)) {
-                return [
-                    'date' => $date,
-                    'dollar' => (float) $dollar,
-                ];
-            }
+        // Formato api-bcv-pi /api/tasa/usd: { "fecha_iso": "...", "valor": { "valor_num": 123.45 } }
+        if (
+            isset($payload['fecha_iso'])
+            && isset($payload['valor']['valor_num'])
+            && is_numeric($payload['valor']['valor_num'])
+        ) {
+            return [
+                'date' => (string) $payload['fecha_iso'],
+                'dollar' => (float) $payload['valor']['valor_num'],
+            ];
         }
 
         return null;
