@@ -46,9 +46,7 @@ return [
         'rate_urls' => array_filter(array_map(
             static fn (string $url): string => trim($url),
             explode(',', (string) env('BCV_RATE_URLS', implode(',', [
-                'https://bcv-api.rafnixg.dev/rates/',
-                'https://bcv-api.rafnixg.dev/api/rates',
-                'https://bcv-api.rafnixg.dev/api/rates/latest',
+                'https://api-bcv-pi.vercel.app/api/tasa',
             ]))),
         )),
     ],
