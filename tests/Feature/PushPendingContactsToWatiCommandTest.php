@@ -54,12 +54,12 @@ class PushPendingContactsToWatiCommandTest extends TestCase
         ]);
 
         Http::fake([
-            'https://wati.test/tenant123/api/v1/addContact/584242290660*' => Http::response(['ok' => true], 200),
+            'https://wati.test/tenant123/api/v1/addContact/%2B584242290660*' => Http::response(['ok' => true], 200),
         ]);
 
         $this->artisan('wati:contacts:push')->assertSuccessful();
 
-        Http::assertSent(fn ($request) => str_contains($request->url(), '/addContact/584242290660'));
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/addContact/%2B584242290660'));
 
         $this->assertDatabaseHas('odoo_contact_syncs', [
             'odoo_contact_id' => 102,

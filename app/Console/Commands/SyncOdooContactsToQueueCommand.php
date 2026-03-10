@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\OdooContactSync;
 use App\Services\OdooXmlRpc;
+use App\Support\VenezuelanPhoneFormatter;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -135,32 +136,12 @@ class SyncOdooContactsToQueueCommand extends Command
             return null;
         }
 
-        $normalized = preg_replace('/[^\d+]/', '', trim($value));
-
-        if (!$normalized) {
-            return null;
-        }
-
         if (!$isVenezuelan) {
+            $normalized = preg_replace('/[^\d+]/', '', trim($value));
             return $normalized;
         }
 
-        $digits = preg_replace('/\D/', '', $normalized) ?? '';
-        if ($digits === '') {
-            return null;
-        }
-
-        if (str_starts_with($digits, '58')) {
-            $digits = substr($digits, 2) ?: '';
-        }
-
-        $digits = ltrim($digits, '0');
-
-        if ($digits === '') {
-            return null;
-        }
-
-        return '+58' . $digits;
+        return VenezuelanPhoneFormatter::toWati($value);
     }
 
     private function isVenezuelanContact(array $row): bool

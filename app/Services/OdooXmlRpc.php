@@ -270,6 +270,47 @@ class OdooXmlRpc
     }
 
     /**
+     * Inspección ligera de modelos relacionados a tasa/currency para evitar sobrecarga.
+     *
+     * @return array<int, array{model:string, available_fields: array<int,string>, sample_rows: array<int,array<string,mixed>>, error?: string}>
+     */
+    public function inspectRateRelatedModels(int $limit = 10): array
+    {
+        $limit = max(1, min($limit, 30));
+        $models = [
+            'res.currency.rate',
+            'res.currency',
+            'ir.config_parameter',
+        ];
+
+        $report = [];
+
+        foreach ($models as $model) {
+            try {
+                $fields = $this->fieldsGet($model);
+                $candidateFields = ['id', 'name', 'display_name', 'currency_id', 'company_id', 'rate', 'inverse_company_rate', 'inverse_rate', 'write_date', 'create_date', 'key', 'value'];
+                $availableFields = array_values(array_filter($candidateFields, fn ($f) => $f === 'id' || array_key_exists($f, $fields)));
+                $sampleRows = $this->searchRead($model, [], $availableFields, $limit);
+
+                $report[] = [
+                    'model' => $model,
+                    'available_fields' => $availableFields,
+                    'sample_rows' => $sampleRows,
+                ];
+            } catch (\Throwable $e) {
+                $report[] = [
+                    'model' => $model,
+                    'available_fields' => [],
+                    'sample_rows' => [],
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return $report;
+    }
+
+    /**
      * Inspecciona un producto buscando por nombre y devuelve todos sus campos.
      */
     public function inspectProductByName(string $query): array
@@ -536,6 +577,30 @@ class OdooXmlRpc
             [],
             [
                 'attributes' => ['string', 'type', 'help', 'currency_field'],
+            ],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+
+        return is_array($parsed) ? $parsed : [];
+    }
+
+    private function searchRead(string $model, array $domain, array $fields, int $limit = 10): array
+    {
+        $uid = $this->getUid();
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            $model,
+            'search_read',
+            [$domain],
+            [
+                'fields' => $fields,
+                'limit' => max(1, min($limit, 30)),
+                'order' => 'id desc',
             ],
         ]);
 
