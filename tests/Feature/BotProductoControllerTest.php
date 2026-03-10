@@ -115,6 +115,25 @@ class BotProductoControllerTest extends TestCase
         });
     }
 
+    public function test_buscar_objcompleto_devuelve_respuesta_de_busqueda(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->nameSearchXml(), 200)
+                ->push($this->productReadXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=acetaminofen');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonPath('0.name', 'Acetaminofen 500mg')
+            ->assertJsonPath('0.default_code', 'ACE500')
+            ->assertJsonPath('1.name', 'Acetaminofen Infantil');
+    }
+
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
     {
         Http::fake([

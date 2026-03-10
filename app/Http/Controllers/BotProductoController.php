@@ -11,6 +11,72 @@ use Throwable;
 
 class BotProductoController extends Controller
 {
+    public function buscar_objcompleto(Request $request)
+    {
+        $nombre = trim($request->query('nombre', ''));
+
+        if ($nombre === '') {
+            return response()->json(['error' => 'Falta el parámetro "nombre"'], 400);
+        }
+
+        try {
+            $odoo = OdooXmlRpc::fromEnv();
+            $productos = $odoo->searchProductsSmart($nombre, 7);
+            $latestRates = $this->getLatestBcvRates();
+
+            $respuesta = array_map(function (array $producto) use ($latestRates) {
+                $qtyAvailable = (float) ($producto['qty_available'] ?? 0);
+                $price = (float) ($producto['price'] ?? 0);
+
+                $precioResCurrencyRate = is_null($latestRates['res_currency_rate'])
+                    ? null
+                    : round($price * (float) $latestRates['res_currency_rate'], 2);
+                $precioResCurrency = is_null($latestRates['res_currency'])
+                    ? null
+                    : round($price * (float) $latestRates['res_currency'], 2);
+
+                $precioResCurrencyRateTexto = is_null($precioResCurrencyRate)
+                    ? 'No disponible'
+                    : number_format($precioResCurrencyRate, 2, ',', '.') . ' bs';
+                $precioResCurrencyTexto = is_null($precioResCurrency)
+                    ? 'No disponible'
+                    : number_format((float) round($precioResCurrency), 0, ',', '.') . ' bs';
+
+                return [
+                    'id' => $producto['id'] ?? null,
+                    'name' => $producto['name'] ?? null,
+                    'default_code' => $producto['default_code'] ?? null,
+                    'barcode' => $producto['barcode'] ?? null,
+                    'qty_available' => $qtyAvailable,
+                    'price' => $price,
+                    'precio_res_currency_rate' => $precioResCurrencyRate,
+                    'precio_res_currency' => $precioResCurrency,
+                    'availability_text_res_currency_rate' => sprintf(
+                        '%s - %s - Precio %s',
+                        $producto['name'] ?? 'Producto sin nombre',
+                        $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
+                        $precioResCurrencyRateTexto,
+                    ),
+                    'availability_text_res_currency' => sprintf(
+                        '%s - %s - Precio %s',
+                        $producto['name'] ?? 'Producto sin nombre',
+                        $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
+                        $precioResCurrencyTexto,
+                    ),
+                ];
+            }, array_slice($productos, 0, 7));
+
+            $this->actualizarProductosEnWati($request, $respuesta);
+
+            return response()->json($respuesta);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => 'Error consultando Odoo',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function buscar(Request $request)
     {
         $nombre = trim($request->query('nombre', ''));
