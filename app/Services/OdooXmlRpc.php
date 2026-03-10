@@ -225,7 +225,7 @@ class OdooXmlRpc
      * - sale.order.line (líneas/productos de la orden)
      *
      * @param int[] $partnerIds
-     * @return array<int,array{ultimo_producto_comprado:?string,producto_mas_comprado:?string,tiene_compras:bool}>
+     * @return array<int,array{ultimo_producto_comprado:string,producto_mas_comprado:string,tiene_compras:bool}>
      */
     public function getPartnerPurchaseInsights(array $partnerIds): array
     {
@@ -248,7 +248,16 @@ class OdooXmlRpc
         );
 
         if (empty($orders)) {
-            return [];
+            $emptyInsights = [];
+            foreach ($partnerIds as $partnerId) {
+                $emptyInsights[$partnerId] = [
+                    'ultimo_producto_comprado' => '',
+                    'producto_mas_comprado' => '',
+                    'tiene_compras' => false,
+                ];
+            }
+
+            return $emptyInsights;
         }
 
         $orderIds = [];
@@ -273,7 +282,16 @@ class OdooXmlRpc
         }
 
         if (empty($orderIds)) {
-            return [];
+            $emptyInsights = [];
+            foreach ($partnerIds as $partnerId) {
+                $emptyInsights[$partnerId] = [
+                    'ultimo_producto_comprado' => '',
+                    'producto_mas_comprado' => '',
+                    'tiene_compras' => false,
+                ];
+            }
+
+            return $emptyInsights;
         }
 
         try {
@@ -344,9 +362,9 @@ class OdooXmlRpc
         foreach ($partnerIds as $partnerId) {
             $lastProducts = isset($lastProductsByPartner[$partnerId])
                 ? implode(', ', array_keys($lastProductsByPartner[$partnerId]))
-                : null;
+                : '';
 
-            $mostPurchased = null;
+            $mostPurchased = '';
             if (!empty($qtyByPartner[$partnerId])) {
                 arsort($qtyByPartner[$partnerId]);
                 $mostPurchased = (string) array_key_first($qtyByPartner[$partnerId]);
@@ -355,7 +373,7 @@ class OdooXmlRpc
             $insights[$partnerId] = [
                 'ultimo_producto_comprado' => $lastProducts,
                 'producto_mas_comprado' => $mostPurchased,
-                'tiene_compras' => ($lastProducts !== null) || ($mostPurchased !== null),
+                'tiene_compras' => ($lastProducts !== '') || ($mostPurchased !== ''),
             ];
         }
 

@@ -32,7 +32,7 @@ Archivo clave:
 - En sincronización Odoo → WATI se consulta compras del cliente en Odoo:
   - Modelo de órdenes: `sale.order` (filtrado por estados `sale` y `done`).
   - Modelo de líneas: `sale.order.line` para extraer productos comprados.
-  - Se persisten dos insights en la cola local: `ultimo_producto_comprado` y `producto_mas_comprado`.
+  - Se persisten dos insights en la cola local: `ultimo_producto_comprado` y `producto_mas_comprado` (vacíos si el cliente no tiene compras).
   - Al enviar a WATI se mapean en atributos `ultimoproductocomprado` y `productomascomprado`.
 - Normalización de teléfonos de Venezuela por canal:
   - **Odoo → WATI:** `+58XXXXXXXXXX` (ejemplo `+584244162964`).

@@ -90,8 +90,8 @@ class SyncOdooContactsToQueueCommand extends Command
                     'vat' => $r['vat'] ?? null,
                     'is_company' => (bool) ($r['is_company'] ?? false),
                     'odoo_write_date' => $this->parseDate($r['write_date'] ?? null),
-                    'ultimo_producto_comprado' => $insights['ultimo_producto_comprado'] ?? null,
-                    'producto_mas_comprado' => $insights['producto_mas_comprado'] ?? null,
+                    'ultimo_producto_comprado' => $insights['ultimo_producto_comprado'] ?? '',
+                    'producto_mas_comprado' => $insights['producto_mas_comprado'] ?? '',
                 ];
 
                 if (!$payload['preferred_whatsapp']) {
