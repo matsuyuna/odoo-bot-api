@@ -317,7 +317,14 @@ class OdooXmlRpc
      */
     public function getLatestCurrencyRates(): array
     {
-        $currencyCode = strtoupper((string) config('services.bcv.currency_code', 'USD'));
+        $configuredCurrencyCode = strtoupper((string) config('services.bcv.currency_code', 'VEF'));
+        $currencyFields = $this->filterExistingFields('res.currency', [
+            'id',
+            'name',
+            'rate',
+            'inverse_rate',
+            'write_date',
+        ]);
         $currencyRateFields = $this->filterExistingFields('res.currency.rate', [
             'id',
             'name',
@@ -330,17 +337,28 @@ class OdooXmlRpc
 
         $currencyRows = $this->searchReadWithOrder(
             'res.currency',
-            [['name', '=', $currencyCode]],
-            ['id', 'name', 'rate', 'inverse_rate', 'write_date'],
+            [['name', '=', $configuredCurrencyCode]],
+            $currencyFields,
             1,
             'write_date desc, id desc',
         );
 
+        if (empty($currencyRows[0]) && $configuredCurrencyCode !== 'VEF') {
+            $currencyRows = $this->searchReadWithOrder(
+                'res.currency',
+                [['name', '=', 'VEF']],
+                $currencyFields,
+                1,
+                'write_date desc, id desc',
+            );
+        }
+
         if (empty($currencyRows[0])) {
-            throw new RuntimeException(sprintf('No se encontró la moneda %s en res.currency.', $currencyCode));
+            throw new RuntimeException(sprintf('No se encontró la moneda %s en res.currency.', $configuredCurrencyCode));
         }
 
         $currencyRow = $currencyRows[0];
+        $currencyCode = (string) ($currencyRow['name'] ?? $configuredCurrencyCode);
         $currencyId = (int) ($currencyRow['id'] ?? 0);
         $currencyRate = $this->normalizeRateValue($currencyRow);
 
