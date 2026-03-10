@@ -317,21 +317,54 @@ class OdooXmlRpc
      */
     public function getLatestCurrencyRates(): array
     {
-        $currencyCode = strtoupper((string) config('services.bcv.currency_code', 'USD'));
+        $configuredCurrencyCode = strtoupper((string) config('services.bcv.currency_code', 'VEF'));
+        $currencyFields = $this->filterExistingFields('res.currency', [
+            'id',
+            'name',
+            'rate',
+            'inverse_rate',
+            'write_date',
+        ]);
+        $currencyRateFields = $this->filterExistingFields('res.currency.rate', [
+            'id',
+            'name',
+            'currency_id',
+            'rate',
+            'inverse_company_rate',
+            'inverse_rate',
+            'write_date',
+        ]);
 
-        $currencyRows = $this->searchReadWithOrder(
-            'res.currency',
-            [['name', '=', $currencyCode]],
-            ['id', 'name', 'rate', 'inverse_rate', 'write_date'],
-            1,
-            'write_date desc, id desc',
-        );
+        $preferredCurrencyCodes = array_values(array_unique(array_filter([
+            'VEF',
+            $configuredCurrencyCode,
+            'USD',
+        ], fn (string $code): bool => $code !== '')));
 
-        if (empty($currencyRows[0])) {
-            throw new RuntimeException(sprintf('No se encontró la moneda %s en res.currency.', $currencyCode));
+        $currencyRow = null;
+        foreach ($preferredCurrencyCodes as $currencyCode) {
+            $currencyRows = $this->searchReadWithOrder(
+                'res.currency',
+                [['name', '=', $currencyCode]],
+                $currencyFields,
+                1,
+                'write_date desc, id desc',
+            );
+
+            if (!empty($currencyRows[0])) {
+                $currencyRow = $currencyRows[0];
+                break;
+            }
         }
 
-        $currencyRow = $currencyRows[0];
+        if (!is_array($currencyRow)) {
+            throw new RuntimeException(sprintf(
+                'No se encontró la moneda esperada en res.currency (prioridad: %s).',
+                implode(', ', $preferredCurrencyCodes),
+            ));
+        }
+
+        $currencyCode = (string) ($currencyRow['name'] ?? $configuredCurrencyCode);
         $currencyId = (int) ($currencyRow['id'] ?? 0);
         $currencyRate = $this->normalizeRateValue($currencyRow);
 
@@ -342,18 +375,18 @@ class OdooXmlRpc
         $rateRows = $this->searchReadWithOrder(
             'res.currency.rate',
             [['currency_id', '=', $currencyId]],
-            ['id', 'name', 'rate', 'inverse_company_rate', 'inverse_rate', 'write_date'],
+            $currencyRateFields,
             1,
-            'name desc, id desc',
+            'write_date desc, id desc',
         );
 
         if (empty($rateRows[0])) {
             $rateRows = $this->searchReadWithOrder(
                 'res.currency.rate',
                 [],
-                ['id', 'name', 'currency_id', 'rate', 'inverse_company_rate', 'inverse_rate', 'write_date'],
-                20,
-                'name desc, id desc',
+                $currencyRateFields,
+                50,
+                'write_date desc, id desc',
             );
 
             $rateRows = array_values(array_filter($rateRows, function (array $row) use ($currencyId): bool {
@@ -665,6 +698,17 @@ class OdooXmlRpc
     private function searchRead(string $model, array $domain, array $fields, int $limit = 10): array
     {
         return $this->searchReadWithOrder($model, $domain, $fields, $limit, 'id desc');
+    }
+
+    /**
+     * @param string[] $fields
+     * @return string[]
+     */
+    private function filterExistingFields(string $model, array $fields): array
+    {
+        $availableFields = $this->fieldsGet($model);
+
+        return array_values(array_filter($fields, fn (string $field): bool => $field === 'id' || array_key_exists($field, $availableFields)));
     }
 
     private function searchReadWithOrder(string $model, array $domain, array $fields, int $limit, string $order): array
