@@ -29,6 +29,9 @@ Archivo clave:
 - Búsqueda de contactos por nombre/email/teléfono.
 - Estructura de contacto normalizada para downstream (incluye `preferred_whatsapp`).
 - Flujo de sincronización y cola en `odoo_contact_syncs`.
+- Normalización de teléfonos de Venezuela por canal:
+  - **Odoo → WATI:** `+58XXXXXXXXXX` (ejemplo `+584244162964`).
+  - **WATI → Odoo:** `0XXXXXXXXXX` (ejemplo `04244162964`).
 
 Archivos clave:
 
@@ -37,17 +40,23 @@ Archivos clave:
 - `app/Console/Commands/SyncOdooContactsToQueueCommand.php`
 - `app/Console/Commands/PushPendingContactsToWatiCommand.php`
 - `app/Console/Commands/SyncWatiContactsToOdooCommand.php`
+- `app/Support/VenezuelanPhoneFormatter.php`
 
 ### 3) Dominio BCV / precios en bolívares
 
 - Persistencia de tasa BCV por fecha.
 - Consumo de la tasa más reciente para mostrar precios en Bs.
+- Inspección segura (limitada) de modelos Odoo potencialmente relacionados a tasa BCV:
+  - `res.currency.rate`
+  - `res.currency`
+  - `ir.config_parameter`
 
 Archivos clave:
 
 - `app/Models/BcvRate.php`
 - `database/migrations/2026_03_05_000001_create_bcv_rates_table.php`
 - `app/Console/Commands/SyncBcvRateCommand.php`
+- `app/Console/Commands/InspectOdooRateTablesCommand.php`
 
 ### 4) Contratos de integración externa
 

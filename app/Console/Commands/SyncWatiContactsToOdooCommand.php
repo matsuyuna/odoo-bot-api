@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\OdooContactSync;
 use App\Services\OdooXmlRpc;
 use App\Services\WatiApi;
+use App\Support\VenezuelanPhoneFormatter;
 use Illuminate\Console\Command;
 
 class SyncWatiContactsToOdooCommand extends Command
@@ -52,8 +53,8 @@ class SyncWatiContactsToOdooCommand extends Command
             foreach ($contacts as $row) {
                 $name = $this->pickString($row, ['name', 'fullName', 'contactName']) ?? 'Sin nombre';
                 $email = $this->pickString($row, ['email']);
-                $watiPhone = $this->normalizePhone($this->pickString($row, ['whatsappNumber', 'phone', 'phone_number', 'mobile']));
-                $phone = $this->formatForOdoo($watiPhone);
+                $watiPhone = $this->pickString($row, ['whatsappNumber', 'phone', 'phone_number', 'mobile']);
+                $phone = VenezuelanPhoneFormatter::toOdoo($watiPhone);
 
                 if (!$phone) {
                     continue;
@@ -130,39 +131,4 @@ class SyncWatiContactsToOdooCommand extends Command
         return null;
     }
 
-    private function normalizePhone(?string $value): ?string
-    {
-        if (!$value) {
-            return null;
-        }
-
-        $normalized = preg_replace('/[^\d+]/', '', trim($value));
-
-        return $normalized ?: null;
-    }
-
-    private function formatForOdoo(?string $phone): ?string
-    {
-        if (!$phone) {
-            return null;
-        }
-
-        $digits = preg_replace('/\D/', '', $phone) ?? '';
-        if ($digits === '') {
-            return null;
-        }
-
-        if (str_starts_with($digits, '58')) {
-            $rest = substr($digits, 2) ?: '';
-            $rest = ltrim($rest, '0');
-
-            if ($rest === '') {
-                return null;
-            }
-
-            return '0' . $rest;
-        }
-
-        return $phone;
-    }
 }

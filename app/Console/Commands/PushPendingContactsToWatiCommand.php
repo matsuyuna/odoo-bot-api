@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\OdooContactSync;
 use App\Services\WatiApi;
+use App\Support\VenezuelanPhoneFormatter;
 use Illuminate\Console\Command;
 
 class PushPendingContactsToWatiCommand extends Command
@@ -46,7 +47,7 @@ class PushPendingContactsToWatiCommand extends Command
             $phone = $this->normalizePhoneForWati($contact->preferred_whatsapp);
             if (!$phone) {
                 $contact->wati_status = 'error';
-                $contact->last_error = 'Teléfono inválido o ausente para WATI (debe tener entre 8 y 15 dígitos).';
+                $contact->last_error = 'Teléfono inválido o ausente para WATI (se espera formato venezolano de 11 dígitos, ejemplo 04244162964).';
                 $contact->save();
                 $failed++;
                 $failureReasons[$contact->last_error] = ($failureReasons[$contact->last_error] ?? 0) + 1;
@@ -97,18 +98,7 @@ class PushPendingContactsToWatiCommand extends Command
 
     private function normalizePhoneForWati(?string $phone): ?string
     {
-        if (!$phone) {
-            return null;
-        }
-
-        $digitsOnly = preg_replace('/\D+/', '', $phone);
-        if (!$digitsOnly) {
-            return null;
-        }
-
-        $len = strlen($digitsOnly);
-
-        return $len >= 8 && $len <= 15 ? $digitsOnly : null;
+        return VenezuelanPhoneFormatter::toWati($phone);
     }
 
     private function normalizeFailureReason(string $message): string
