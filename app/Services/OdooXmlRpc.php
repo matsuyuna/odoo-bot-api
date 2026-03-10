@@ -348,18 +348,38 @@ class OdooXmlRpc
         );
 
         if (empty($rateRows[0])) {
-            throw new RuntimeException('No se encontró tasa en res.currency.rate para la moneda configurada.');
+            $rateRows = $this->searchReadWithOrder(
+                'res.currency.rate',
+                [],
+                ['id', 'name', 'currency_id', 'rate', 'inverse_company_rate', 'inverse_rate', 'write_date'],
+                20,
+                'name desc, id desc',
+            );
+
+            $rateRows = array_values(array_filter($rateRows, function (array $row) use ($currencyId): bool {
+                $rawCurrencyId = $row['currency_id'] ?? null;
+
+                if (is_array($rawCurrencyId)) {
+                    return (int) ($rawCurrencyId[0] ?? 0) === $currencyId;
+                }
+
+                return (int) $rawCurrencyId === $currencyId;
+            }));
         }
 
-        $rateRow = $rateRows[0];
-        $resCurrencyRate = $this->normalizeRateValue($rateRow);
+        $rateRow = $rateRows[0] ?? null;
+        $resCurrencyRate = is_array($rateRow) ? $this->normalizeRateValue($rateRow) : null;
 
         if ($resCurrencyRate === null) {
-            throw new RuntimeException('No se pudo leer una tasa válida desde res.currency.rate.');
+            // Fallback defensivo para no romper el cron cuando no hay histórico en res.currency.rate.
+            $resCurrencyRate = $currencyRate;
+            $rateDate = (string) ($currencyRow['write_date'] ?? now()->toDateString());
+        } else {
+            $rateDate = (string) ($rateRow['name'] ?? $rateRow['write_date'] ?? now()->toDateString());
         }
 
         return [
-            'date' => (string) ($rateRow['name'] ?? $rateRow['write_date'] ?? now()->toDateString()),
+            'date' => $rateDate,
             'res_currency_rate' => $resCurrencyRate,
             'res_currency' => $currencyRate,
             'currency_code' => $currencyCode,
