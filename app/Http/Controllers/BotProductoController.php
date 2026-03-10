@@ -55,13 +55,11 @@ class BotProductoController extends Controller
                         '%s - %s - Precio %s',
                         $producto['name'] ?? 'Producto sin nombre',
                         $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
-                        $precioResCurrencyRateTexto,
                     ),
                     'availability_text_res_currency' => sprintf(
                         '%s - %s - Precio %s',
                         $producto['name'] ?? 'Producto sin nombre',
                         $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
-                        $precioResCurrencyTexto,
                     ),
                 ];
             }, array_slice($productos, 0, 7));
