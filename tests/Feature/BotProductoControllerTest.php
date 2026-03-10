@@ -95,18 +95,8 @@ class BotProductoControllerTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertJsonCount(2)
-            ->assertJsonPath('0.name', 'Acetaminofen 500mg')
-            ->assertJsonPath('0.price', 19.9)
-            ->assertJsonPath('0.precio_bcv', 8515.81098)
-            ->assertJsonPath('0.availability_text', 'Acetaminofen 500mg - Si hay disponible - Precio: 8.516 Bs')
-            ->assertJsonPath('0.availability_text_res_currency_rate', 'Acetaminofen 500mg - Si hay disponible - Precio 8.515,81 bs')
-            ->assertJsonPath('0.availability_text_res_currency', 'Acetaminofen 500mg - Si hay disponible - Precio 8.516 bs')
-            ->assertJsonPath('1.name', 'Acetaminofen Infantil')
-            ->assertJsonPath('1.price', 12.4)
-            ->assertJsonPath('1.availability_text', 'Acetaminofen Infantil - Si hay disponible - Precio: 5.306 Bs')
-            ->assertJsonPath('1.availability_text_res_currency_rate', 'Acetaminofen Infantil - Si hay disponible - Precio 5.306,33 bs')
-            ->assertJsonPath('1.availability_text_res_currency', 'Acetaminofen Infantil - Si hay disponible - Precio 5.306 bs');
+            ->assertJsonCount(1)
+            ->assertJsonPath('availability_text', "- Acetaminofen 500mg - Si hay disponible - Precio 8.516 bs\n\n- Acetaminofen Infantil - Si hay disponible - Precio 5.306 bs");
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/api/v1/updateContactAttributes/584001112233')
@@ -145,7 +135,7 @@ class BotProductoControllerTest extends TestCase
 
         $response = $this->getJson('/api/buscar-producto?nombre=acetaminofen');
 
-        $response->assertOk()->assertJsonCount(2);
+        $response->assertOk()->assertJsonCount(1)->assertJsonStructure(['availability_text']);
 
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'updateContactAttributes'));
     }
@@ -163,7 +153,7 @@ class BotProductoControllerTest extends TestCase
                 ->push($this->productReadByLocationXml(4, 2), 200),
         ]);
 
-        $response = $this->getJson('/api/buscar-producto?nombre=acetaminofen');
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=acetaminofen');
 
         $response
             ->assertOk()
