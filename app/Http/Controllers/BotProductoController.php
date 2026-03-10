@@ -135,7 +135,7 @@ class BotProductoController extends Controller
             $this->actualizarProductosEnWati($request, $respuesta);
 
             $availabilityTexts = array_values(array_filter(array_map(
-                fn (array $producto) => trim((string) ($producto['availability_text_res_currency'] ?? '')),
+                fn (array $producto) => str_replace(' - ', ' ', trim((string) ($producto['availability_text_res_currency'] ?? ''))),
                 $respuesta
             )));
 
