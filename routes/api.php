@@ -6,6 +6,7 @@ use App\Http\Controllers\BotContactoController;
 use App\Http\Controllers\BotProductoController;
 
 Route::get('/buscar-producto', [BotProductoController::class, 'buscar']);
+Route::get('/buscar-producto-objcompleto', [BotProductoController::class, 'buscar_objcompleto']);
 Route::get('/buscar-contacto', [BotContactoController::class, 'buscar']);
 
 // Route deshabilitada temporalmente: inspección de producto
