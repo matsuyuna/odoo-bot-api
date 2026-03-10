@@ -42,10 +42,26 @@ class InspectOdooRateTablesCommand extends Command
             }
 
             $headers = array_keys((array) $rows[0]);
-            $tableRows = array_map(fn ($row) => array_values((array) $row), $rows);
+            $tableRows = array_map(function ($row) {
+                return array_map(fn ($cell) => $this->normalizeTableCell($cell), array_values((array) $row));
+            }, $rows);
             $this->table($headers, $tableRows);
         }
 
         return self::SUCCESS;
+    }
+
+    private function normalizeTableCell(mixed $value): string|int|float|bool|null
+    {
+        if (is_scalar($value) || $value === null) {
+            return $value;
+        }
+
+        if ($value instanceof \Stringable) {
+            return (string) $value;
+        }
+
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            ?: '[unserializable]';
     }
 }
