@@ -62,6 +62,8 @@ class PushPendingContactsToWatiCommand extends Command
                         ['name' => 'email', 'value' => (string) ($contact->email ?? '')],
                         ['name' => 'vat', 'value' => (string) ($contact->vat ?? '')],
                         ['name' => 'odoo_contact_id', 'value' => (string) $contact->odoo_contact_id],
+                        ['name' => 'ultimoproductocomprado', 'value' => (string) ($contact->ultimo_producto_comprado ?? '')],
+                        ['name' => 'productomascomprado', 'value' => (string) ($contact->producto_mas_comprado ?? '')],
                     ]
                 );
 

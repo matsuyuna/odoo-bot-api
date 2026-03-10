@@ -216,6 +216,152 @@ class OdooXmlRpc
         return is_array($parsed) ? $parsed : [];
     }
 
+
+    /**
+     * Obtiene insights de compras por cliente desde Odoo.
+     *
+     * Modelos usados:
+     * - sale.order (órdenes de venta)
+     * - sale.order.line (líneas/productos de la orden)
+     *
+     * @param int[] $partnerIds
+     * @return array<int,array{ultimo_producto_comprado:?string,producto_mas_comprado:?string,tiene_compras:bool}>
+     */
+    public function getPartnerPurchaseInsights(array $partnerIds): array
+    {
+        $partnerIds = array_values(array_unique(array_map('intval', $partnerIds)));
+        $partnerIds = array_values(array_filter($partnerIds, fn (int $id): bool => $id > 0));
+
+        if (empty($partnerIds)) {
+            return [];
+        }
+
+        $orders = $this->searchReadRaw(
+            'sale.order',
+            [
+                ['partner_id', 'in', $partnerIds],
+                ['state', 'in', ['sale', 'done']],
+            ],
+            ['id', 'partner_id', 'date_order'],
+            5000,
+            'date_order desc, id desc'
+        );
+
+        if (empty($orders)) {
+            return [];
+        }
+
+        $orderIds = [];
+        $latestOrderByPartner = [];
+
+        foreach ($orders as $order) {
+            $orderId = (int) ($order['id'] ?? 0);
+            if ($orderId <= 0) {
+                continue;
+            }
+
+            $partnerField = $order['partner_id'] ?? null;
+            $partnerId = is_array($partnerField) ? (int) ($partnerField[0] ?? 0) : (int) $partnerField;
+            if ($partnerId <= 0) {
+                continue;
+            }
+
+            $orderIds[] = $orderId;
+            if (!isset($latestOrderByPartner[$partnerId])) {
+                $latestOrderByPartner[$partnerId] = $orderId;
+            }
+        }
+
+        if (empty($orderIds)) {
+            return [];
+        }
+
+        try {
+            $lines = $this->searchReadRaw(
+                'sale.order.line',
+                [
+                    ['order_id', 'in', array_values(array_unique($orderIds))],
+                    ['display_type', '=', false],
+                ],
+                ['order_id', 'product_id', 'product_uom_qty'],
+                10000,
+                'id asc'
+            );
+        } catch (\Throwable) {
+            $lines = $this->searchReadRaw(
+                'sale.order.line',
+                [
+                    ['order_id', 'in', array_values(array_unique($orderIds))],
+                ],
+                ['order_id', 'product_id', 'product_uom_qty'],
+                10000,
+                'id asc'
+            );
+        }
+
+        $orderPartnerMap = [];
+        foreach ($orders as $order) {
+            $orderId = (int) ($order['id'] ?? 0);
+            if ($orderId <= 0) {
+                continue;
+            }
+
+            $partnerField = $order['partner_id'] ?? null;
+            $partnerId = is_array($partnerField) ? (int) ($partnerField[0] ?? 0) : (int) $partnerField;
+            if ($partnerId > 0) {
+                $orderPartnerMap[$orderId] = $partnerId;
+            }
+        }
+
+        $lastProductsByPartner = [];
+        $qtyByPartner = [];
+
+        foreach ($lines as $line) {
+            $orderField = $line['order_id'] ?? null;
+            $orderId = is_array($orderField) ? (int) ($orderField[0] ?? 0) : (int) $orderField;
+            if ($orderId <= 0 || !isset($orderPartnerMap[$orderId])) {
+                continue;
+            }
+
+            $partnerId = $orderPartnerMap[$orderId];
+            $productField = $line['product_id'] ?? null;
+            $productId = is_array($productField) ? (int) ($productField[0] ?? 0) : 0;
+            $productName = is_array($productField) ? trim((string) ($productField[1] ?? '')) : '';
+            if ($productId <= 0 || $productName === '') {
+                continue;
+            }
+
+            $qty = (float) ($line['product_uom_qty'] ?? 0);
+            $qtyByPartner[$partnerId][$productName] = ($qtyByPartner[$partnerId][$productName] ?? 0.0) + $qty;
+
+            if (($latestOrderByPartner[$partnerId] ?? null) === $orderId) {
+                $lastProductsByPartner[$partnerId][$productName] = true;
+            }
+        }
+
+        $insights = [];
+
+        foreach ($partnerIds as $partnerId) {
+            $lastProducts = isset($lastProductsByPartner[$partnerId])
+                ? implode(', ', array_keys($lastProductsByPartner[$partnerId]))
+                : null;
+
+            $mostPurchased = null;
+            if (!empty($qtyByPartner[$partnerId])) {
+                arsort($qtyByPartner[$partnerId]);
+                $mostPurchased = (string) array_key_first($qtyByPartner[$partnerId]);
+            }
+
+            $insights[$partnerId] = [
+                'ultimo_producto_comprado' => $lastProducts,
+                'producto_mas_comprado' => $mostPurchased,
+                'tiene_compras' => ($lastProducts !== null) || ($mostPurchased !== null),
+            ];
+        }
+
+        return $insights;
+    }
+
     /**
      * Audita si en res.partner hay campos útiles para identificar país de origen del teléfono.
      *
@@ -725,6 +871,30 @@ class OdooXmlRpc
             [
                 'fields' => $fields,
                 'limit' => max(1, min($limit, 30)),
+                'order' => $order,
+            ],
+        ]);
+
+        $raw = $this->postXml($this->baseUrl . '/xmlrpc/2/object', $xml);
+        $parsed = $this->parseXmlRpc($raw);
+
+        return is_array($parsed) ? $parsed : [];
+    }
+
+    private function searchReadRaw(string $model, array $domain, array $fields, int $limit, string $order): array
+    {
+        $uid = $this->getUid();
+
+        $xml = $this->buildMethodCall('execute_kw', [
+            $this->db,
+            $uid,
+            $this->password,
+            $model,
+            'search_read',
+            [$domain],
+            [
+                'fields' => $fields,
+                'limit' => max(1, $limit),
                 'order' => $order,
             ],
         ]);

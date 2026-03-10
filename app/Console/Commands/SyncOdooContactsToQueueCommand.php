@@ -60,6 +60,12 @@ class SyncOdooContactsToQueueCommand extends Command
             $batchNumber++;
             $this->info("Procesando lote {$batchNumber} (" . count($rows) . ' contactos, offset ' . $offset . ')');
 
+            $partnerIds = array_values(array_filter(array_map(
+                fn (array $row): int => (int) ($row['id'] ?? 0),
+                $rows
+            )));
+            $purchaseInsightsByPartner = $odoo->getPartnerPurchaseInsights($partnerIds);
+
             foreach ($rows as $r) {
                 if ($maxTotal > 0 && $processed >= $maxTotal) {
                     break 2;
@@ -69,6 +75,8 @@ class SyncOdooContactsToQueueCommand extends Command
                 if (!is_int($odooId)) {
                     continue;
                 }
+
+                $insights = $purchaseInsightsByPartner[$odooId] ?? null;
 
                 $payload = [
                     'name' => $r['name'] ?? null,
@@ -82,6 +90,8 @@ class SyncOdooContactsToQueueCommand extends Command
                     'vat' => $r['vat'] ?? null,
                     'is_company' => (bool) ($r['is_company'] ?? false),
                     'odoo_write_date' => $this->parseDate($r['write_date'] ?? null),
+                    'ultimo_producto_comprado' => $insights['ultimo_producto_comprado'] ?? null,
+                    'producto_mas_comprado' => $insights['producto_mas_comprado'] ?? null,
                 ];
 
                 if (!$payload['preferred_whatsapp']) {
