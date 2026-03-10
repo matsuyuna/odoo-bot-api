@@ -44,12 +44,12 @@ class BotProductoController extends Controller
                     'precio_res_currency_rate' => $precioResCurrencyRate,
                     'precio_res_currency' => $precioResCurrency,
                     'availability_text_res_currency_rate' => sprintf(
-                        '%s - %s',
+                        '%s - %s - Precio (res.currency.rate)',
                         $producto['name'] ?? 'Producto sin nombre',
                         $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
                     ),
                     'availability_text_res_currency' => sprintf(
-                        '%s - %s',
+                        '%s - %s - Precio (res.currency)',
                         $producto['name'] ?? 'Producto sin nombre',
                         $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
                     ),

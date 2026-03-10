@@ -98,13 +98,13 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('0.price', 19.9)
             ->assertJsonPath('0.precio_bcv', 8515.81098)
             ->assertJsonPath('0.availability_text', 'Acetaminofen 500mg - Si hay disponible - Precio: 8.516 Bs')
-            ->assertJsonPath('0.availability_text_res_currency_rate', 'Acetaminofen 500mg - Si hay disponible')
-            ->assertJsonPath('0.availability_text_res_currency', 'Acetaminofen 500mg - Si hay disponible')
+            ->assertJsonPath('0.availability_text_res_currency_rate', 'Acetaminofen 500mg - Si hay disponible - Precio (res.currency.rate)')
+            ->assertJsonPath('0.availability_text_res_currency', 'Acetaminofen 500mg - Si hay disponible - Precio (res.currency)')
             ->assertJsonPath('1.name', 'Acetaminofen Infantil')
             ->assertJsonPath('1.price', 12.4)
             ->assertJsonPath('1.availability_text', 'Acetaminofen Infantil - Si hay disponible - Precio: 5.306 Bs')
-            ->assertJsonPath('1.availability_text_res_currency_rate', 'Acetaminofen Infantil - Si hay disponible')
-            ->assertJsonPath('1.availability_text_res_currency', 'Acetaminofen Infantil - Si hay disponible');
+            ->assertJsonPath('1.availability_text_res_currency_rate', 'Acetaminofen Infantil - Si hay disponible - Precio (res.currency.rate)')
+            ->assertJsonPath('1.availability_text_res_currency', 'Acetaminofen Infantil - Si hay disponible - Precio (res.currency)');
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/api/v1/updateContactAttributes/584001112233')
