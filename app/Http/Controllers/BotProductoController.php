@@ -134,7 +134,18 @@ class BotProductoController extends Controller
 
             $this->actualizarProductosEnWati($request, $respuesta);
 
-            return response()->json($respuesta);
+            $availabilityTexts = array_values(array_filter(array_map(
+                fn (array $producto) => trim((string) ($producto['availability_text_res_currency'] ?? '')),
+                $respuesta
+            )));
+
+            $availabilityText = empty($availabilityTexts)
+                ? ''
+                : '- ' . implode("\n- ", $availabilityTexts);
+
+            return response()->json([
+                'availability_text' => $availabilityText,
+            ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'error' => 'Error consultando Odoo',
