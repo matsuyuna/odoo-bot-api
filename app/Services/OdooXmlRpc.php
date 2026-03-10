@@ -318,6 +318,15 @@ class OdooXmlRpc
     public function getLatestCurrencyRates(): array
     {
         $currencyCode = strtoupper((string) config('services.bcv.currency_code', 'USD'));
+        $currencyRateFields = $this->filterExistingFields('res.currency.rate', [
+            'id',
+            'name',
+            'currency_id',
+            'rate',
+            'inverse_company_rate',
+            'inverse_rate',
+            'write_date',
+        ]);
 
         $currencyRows = $this->searchReadWithOrder(
             'res.currency',
@@ -342,7 +351,7 @@ class OdooXmlRpc
         $rateRows = $this->searchReadWithOrder(
             'res.currency.rate',
             [['currency_id', '=', $currencyId]],
-            ['id', 'name', 'rate', 'inverse_company_rate', 'inverse_rate', 'write_date'],
+            $currencyRateFields,
             1,
             'name desc, id desc',
         );
@@ -351,7 +360,7 @@ class OdooXmlRpc
             $rateRows = $this->searchReadWithOrder(
                 'res.currency.rate',
                 [],
-                ['id', 'name', 'currency_id', 'rate', 'inverse_company_rate', 'inverse_rate', 'write_date'],
+                $currencyRateFields,
                 20,
                 'name desc, id desc',
             );
@@ -665,6 +674,17 @@ class OdooXmlRpc
     private function searchRead(string $model, array $domain, array $fields, int $limit = 10): array
     {
         return $this->searchReadWithOrder($model, $domain, $fields, $limit, 'id desc');
+    }
+
+    /**
+     * @param string[] $fields
+     * @return string[]
+     */
+    private function filterExistingFields(string $model, array $fields): array
+    {
+        $availableFields = $this->fieldsGet($model);
+
+        return array_values(array_filter($fields, fn (string $field): bool => $field === 'id' || array_key_exists($field, $availableFields)));
     }
 
     private function searchReadWithOrder(string $model, array $domain, array $fields, int $limit, string $order): array
