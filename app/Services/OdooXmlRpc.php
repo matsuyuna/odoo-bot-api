@@ -335,29 +335,35 @@ class OdooXmlRpc
             'write_date',
         ]);
 
-        $currencyRows = $this->searchReadWithOrder(
-            'res.currency',
-            [['name', '=', $configuredCurrencyCode]],
-            $currencyFields,
-            1,
-            'write_date desc, id desc',
-        );
+        $preferredCurrencyCodes = array_values(array_unique(array_filter([
+            'VEF',
+            $configuredCurrencyCode,
+            'USD',
+        ], fn (string $code): bool => $code !== '')));
 
-        if (empty($currencyRows[0]) && $configuredCurrencyCode !== 'VEF') {
+        $currencyRow = null;
+        foreach ($preferredCurrencyCodes as $currencyCode) {
             $currencyRows = $this->searchReadWithOrder(
                 'res.currency',
-                [['name', '=', 'VEF']],
+                [['name', '=', $currencyCode]],
                 $currencyFields,
                 1,
                 'write_date desc, id desc',
             );
+
+            if (!empty($currencyRows[0])) {
+                $currencyRow = $currencyRows[0];
+                break;
+            }
         }
 
-        if (empty($currencyRows[0])) {
-            throw new RuntimeException(sprintf('No se encontró la moneda %s en res.currency.', $configuredCurrencyCode));
+        if (!is_array($currencyRow)) {
+            throw new RuntimeException(sprintf(
+                'No se encontró la moneda esperada en res.currency (prioridad: %s).',
+                implode(', ', $preferredCurrencyCodes),
+            ));
         }
 
-        $currencyRow = $currencyRows[0];
         $currencyCode = (string) ($currencyRow['name'] ?? $configuredCurrencyCode);
         $currencyId = (int) ($currencyRow['id'] ?? 0);
         $currencyRate = $this->normalizeRateValue($currencyRow);
@@ -371,7 +377,7 @@ class OdooXmlRpc
             [['currency_id', '=', $currencyId]],
             $currencyRateFields,
             1,
-            'name desc, id desc',
+            'write_date desc, id desc',
         );
 
         if (empty($rateRows[0])) {
@@ -379,8 +385,8 @@ class OdooXmlRpc
                 'res.currency.rate',
                 [],
                 $currencyRateFields,
-                20,
-                'name desc, id desc',
+                50,
+                'write_date desc, id desc',
             );
 
             $rateRows = array_values(array_filter($rateRows, function (array $row) use ($currencyId): bool {
