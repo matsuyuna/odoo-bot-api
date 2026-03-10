@@ -74,6 +74,8 @@ class BotProductoControllerTest extends TestCase
         BcvRate::query()->create([
             'date' => '2026-03-04',
             'dollar' => 427.9302,
+            'res_currency_rate' => 427.9302,
+            'res_currency' => 427.9302,
         ]);
 
         putenv('WATI_BASE_URL=https://wati.test');
@@ -98,9 +100,13 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('0.price', 19.9)
             ->assertJsonPath('0.precio_bcv', 8515.81098)
             ->assertJsonPath('0.availability_text', 'Acetaminofen 500mg - Si hay disponible - Precio: 8.516 Bs')
+            ->assertJsonPath('0.availability_text_res_currency_rate', 'Acetaminofen 500mg - Si hay disponible - Precio 8.515,81 bs')
+            ->assertJsonPath('0.availability_text_res_currency', 'Acetaminofen 500mg - Si hay disponible - Precio 8.516 bs')
             ->assertJsonPath('1.name', 'Acetaminofen Infantil')
             ->assertJsonPath('1.price', 12.4)
-            ->assertJsonPath('1.availability_text', 'Acetaminofen Infantil - Si hay disponible - Precio: 5.306 Bs');
+            ->assertJsonPath('1.availability_text', 'Acetaminofen Infantil - Si hay disponible - Precio: 5.306 Bs')
+            ->assertJsonPath('1.availability_text_res_currency_rate', 'Acetaminofen Infantil - Si hay disponible - Precio 5.306,33 bs')
+            ->assertJsonPath('1.availability_text_res_currency', 'Acetaminofen Infantil - Si hay disponible - Precio 5.306 bs');
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/api/v1/updateContactAttributes/584001112233')

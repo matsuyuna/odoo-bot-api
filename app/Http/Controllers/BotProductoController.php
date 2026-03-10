@@ -37,10 +37,10 @@ class BotProductoController extends Controller
 
                 $precioResCurrencyRateTexto = is_null($precioResCurrencyRate)
                     ? 'No disponible'
-                    : number_format((float) round($precioResCurrencyRate), 0, ',', '.') . ' Bs';
+                    : number_format($precioResCurrencyRate, 2, ',', '.') . ' bs';
                 $precioResCurrencyTexto = is_null($precioResCurrency)
                     ? 'No disponible'
-                    : number_format((float) round($precioResCurrency), 0, ',', '.') . ' Bs';
+                    : number_format((float) round($precioResCurrency), 0, ',', '.') . ' bs';
 
                 return [
                     'id' => $producto['id'] ?? null,
@@ -52,13 +52,13 @@ class BotProductoController extends Controller
                     'precio_res_currency_rate' => $precioResCurrencyRate,
                     'precio_res_currency' => $precioResCurrency,
                     'availability_text_res_currency_rate' => sprintf(
-                        '%s - %s - Precio (res.currency.rate): %s',
+                        '%s - %s - Precio %s',
                         $producto['name'] ?? 'Producto sin nombre',
                         $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
                         $precioResCurrencyRateTexto,
                     ),
                     'availability_text_res_currency' => sprintf(
-                        '%s - %s - Precio (res.currency): %s',
+                        '%s - %s - Precio %s',
                         $producto['name'] ?? 'Producto sin nombre',
                         $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
                         $precioResCurrencyTexto,
