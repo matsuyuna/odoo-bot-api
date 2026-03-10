@@ -141,7 +141,10 @@ class BotProductoController extends Controller
 
             $availabilityText = empty($availabilityTexts)
                 ? ''
-                : '- ' . implode("\n- ", $availabilityTexts);
+                : implode("\n\n", array_map(
+                    fn (string $text) => '- ' . $text,
+                    $availabilityTexts
+                ));
 
             return response()->json([
                 'availability_text' => $availabilityText,

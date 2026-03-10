@@ -96,7 +96,7 @@ class BotProductoControllerTest extends TestCase
         $response
             ->assertOk()
             ->assertJsonCount(1)
-            ->assertJsonPath('availability_text', "- Acetaminofen 500mg - Si hay disponible - Precio 8.516 bs\n- Acetaminofen Infantil - Si hay disponible - Precio 5.306 bs");
+            ->assertJsonPath('availability_text', "- Acetaminofen 500mg - Si hay disponible - Precio 8.516 bs\n\n- Acetaminofen Infantil - Si hay disponible - Precio 5.306 bs");
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/api/v1/updateContactAttributes/584001112233')
