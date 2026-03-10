@@ -50,6 +50,8 @@ class PushPendingContactsToWatiCommandTest extends TestCase
             'odoo_contact_id' => 102,
             'name' => 'Contacto Válido',
             'preferred_whatsapp' => '+58 (424) 229-0660',
+            'ultimo_producto_comprado' => 'Acetaminofén 500mg, Vitamina C',
+            'producto_mas_comprado' => 'Acetaminofén 500mg',
             'wati_status' => 'pending',
         ]);
 
@@ -59,7 +61,17 @@ class PushPendingContactsToWatiCommandTest extends TestCase
 
         $this->artisan('wati:contacts:push')->assertSuccessful();
 
-        Http::assertSent(fn ($request) => str_contains($request->url(), '/addContact/%2B584242290660'));
+        Http::assertSent(function ($request) {
+            if (!str_contains($request->url(), '/addContact/%2B584242290660')) {
+                return false;
+            }
+
+            $payload = $request->data();
+            $customParams = collect($payload['customParams'] ?? [])->keyBy('name');
+
+            return ($customParams['ultimoproductocomprado']['value'] ?? null) === 'Acetaminofén 500mg, Vitamina C'
+                && ($customParams['productomascomprado']['value'] ?? null) === 'Acetaminofén 500mg';
+        });
 
         $this->assertDatabaseHas('odoo_contact_syncs', [
             'odoo_contact_id' => 102,

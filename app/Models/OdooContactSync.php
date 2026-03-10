@@ -18,6 +18,8 @@ class OdooContactSync extends Model
         'vat',
         'is_company',
         'odoo_write_date',
+        'ultimo_producto_comprado',
+        'producto_mas_comprado',
         'wati_status',
         'wati_external_id',
         'wati_response',
