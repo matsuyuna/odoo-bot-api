@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
+use App\Http\Controllers\WatiMonitorController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -36,3 +37,6 @@ Route::get('/probar-odoo', function () {
         'body' => $response->body(),
     ];
 });
+
+Route::get('/wati/monitor', [WatiMonitorController::class, 'index'])->name('wati.monitor');
+Route::post('/wati/monitor/contactos', [WatiMonitorController::class, 'storeContact'])->name('wati.monitor.store');
