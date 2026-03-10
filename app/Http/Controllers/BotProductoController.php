@@ -22,15 +22,25 @@ class BotProductoController extends Controller
         try {
             $odoo = OdooXmlRpc::fromEnv();
             $productos = $odoo->searchProductsSmart($nombre, 7);
-            $latestRate = $this->getLatestBcvRate();
+            $latestRates = $this->getLatestBcvRates();
 
-            $respuesta = array_map(function (array $producto) use ($latestRate) {
+            $respuesta = array_map(function (array $producto) use ($latestRates) {
                 $qtyAvailable = (float) ($producto['qty_available'] ?? 0);
                 $price = (float) ($producto['price'] ?? 0);
-                $precioBcv = is_null($latestRate) ? null : round($price * $latestRate, 2);
-                $precioEnTexto = is_null($precioBcv)
+
+                $precioResCurrencyRate = is_null($latestRates['res_currency_rate'])
+                    ? null
+                    : round($price * (float) $latestRates['res_currency_rate'], 2);
+                $precioResCurrency = is_null($latestRates['res_currency'])
+                    ? null
+                    : round($price * (float) $latestRates['res_currency'], 2);
+
+                $precioResCurrencyRateTexto = is_null($precioResCurrencyRate)
                     ? 'No disponible'
-                    : number_format((float) round($precioBcv), 0, ',', '.') . ' Bs';
+                    : number_format((float) round($precioResCurrencyRate), 0, ',', '.') . ' Bs';
+                $precioResCurrencyTexto = is_null($precioResCurrency)
+                    ? 'No disponible'
+                    : number_format((float) round($precioResCurrency), 0, ',', '.') . ' Bs';
 
                 return [
                     'id' => $producto['id'] ?? null,
@@ -39,12 +49,19 @@ class BotProductoController extends Controller
                     'barcode' => $producto['barcode'] ?? null,
                     'qty_available' => $qtyAvailable,
                     'price' => $price,
-                    'precio_bcv' => $precioBcv,
-                    'availability_text' => sprintf(
-                        '%s - %s - Precio: %s',
+                    'precio_res_currency_rate' => $precioResCurrencyRate,
+                    'precio_res_currency' => $precioResCurrency,
+                    'availability_text_res_currency_rate' => sprintf(
+                        '%s - %s - Precio (res.currency.rate): %s',
                         $producto['name'] ?? 'Producto sin nombre',
                         $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
-                        $precioEnTexto,
+                        $precioResCurrencyRateTexto,
+                    ),
+                    'availability_text_res_currency' => sprintf(
+                        '%s - %s - Precio (res.currency): %s',
+                        $producto['name'] ?? 'Producto sin nombre',
+                        $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
+                        $precioResCurrencyTexto,
                     ),
                 ];
             }, array_slice($productos, 0, 7));
@@ -60,18 +77,26 @@ class BotProductoController extends Controller
         }
     }
 
-    private function getLatestBcvRate(): ?float
+    private function getLatestBcvRates(): array
     {
         try {
-            $rate = BcvRate::query()->latest('date')->value('dollar');
+            $rate = BcvRate::query()
+                ->latest('date')
+                ->first(['res_currency_rate', 'res_currency']);
 
-            return is_null($rate) ? null : (float) $rate;
+            return [
+                'res_currency_rate' => is_null($rate?->res_currency_rate) ? null : (float) $rate->res_currency_rate,
+                'res_currency' => is_null($rate?->res_currency) ? null : (float) $rate->res_currency,
+            ];
         } catch (Throwable $e) {
-            Log::warning('No se pudo cargar la última tasa BCV.', [
+            Log::warning('No se pudieron cargar las últimas tasas BCV.', [
                 'error' => $e->getMessage(),
             ]);
 
-            return null;
+            return [
+                'res_currency_rate' => null,
+                'res_currency' => null,
+            ];
         }
     }
 

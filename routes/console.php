@@ -12,4 +12,4 @@ Schedule::command('odoo:contacts:pull --batch-size=500 --max-total=0')->everyFiv
 Schedule::command('wati:contacts:push --limit=150')->everyFiveMinutes()->withoutOverlapping();
 
 Schedule::command('wati:contacts:pull --page-size=100 --max-pages=2')->everyTenMinutes()->withoutOverlapping();
-Schedule::command('bcv:rates:sync')->dailyAt('03:00')->withoutOverlapping();
+Schedule::command('bcv:rates:sync')->cron((string) env('BCV_SYNC_CRON', '*/10 * * * *'))->withoutOverlapping();
