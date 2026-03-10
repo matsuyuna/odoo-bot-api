@@ -311,6 +311,62 @@ class OdooXmlRpc
     }
 
     /**
+     * Obtiene la tasa actual desde los modelos res.currency.rate y res.currency.
+     *
+     * @return array{date:string,res_currency_rate:float,res_currency:float,currency_code:string}
+     */
+    public function getLatestCurrencyRates(): array
+    {
+        $currencyCode = strtoupper((string) config('services.bcv.currency_code', 'USD'));
+
+        $currencyRows = $this->searchReadWithOrder(
+            'res.currency',
+            [['name', '=', $currencyCode]],
+            ['id', 'name', 'rate', 'inverse_rate', 'write_date'],
+            1,
+            'write_date desc, id desc',
+        );
+
+        if (empty($currencyRows[0])) {
+            throw new RuntimeException(sprintf('No se encontró la moneda %s en res.currency.', $currencyCode));
+        }
+
+        $currencyRow = $currencyRows[0];
+        $currencyId = (int) ($currencyRow['id'] ?? 0);
+        $currencyRate = $this->normalizeRateValue($currencyRow);
+
+        if ($currencyId <= 0 || $currencyRate === null) {
+            throw new RuntimeException('No se pudo leer una tasa válida desde res.currency.');
+        }
+
+        $rateRows = $this->searchReadWithOrder(
+            'res.currency.rate',
+            [['currency_id', '=', $currencyId]],
+            ['id', 'name', 'rate', 'inverse_company_rate', 'inverse_rate', 'write_date'],
+            1,
+            'name desc, id desc',
+        );
+
+        if (empty($rateRows[0])) {
+            throw new RuntimeException('No se encontró tasa en res.currency.rate para la moneda configurada.');
+        }
+
+        $rateRow = $rateRows[0];
+        $resCurrencyRate = $this->normalizeRateValue($rateRow);
+
+        if ($resCurrencyRate === null) {
+            throw new RuntimeException('No se pudo leer una tasa válida desde res.currency.rate.');
+        }
+
+        return [
+            'date' => (string) ($rateRow['name'] ?? $rateRow['write_date'] ?? now()->toDateString()),
+            'res_currency_rate' => $resCurrencyRate,
+            'res_currency' => $currencyRate,
+            'currency_code' => $currencyCode,
+        ];
+    }
+
+    /**
      * Inspecciona un producto buscando por nombre y devuelve todos sus campos.
      */
     public function inspectProductByName(string $query): array
@@ -588,6 +644,11 @@ class OdooXmlRpc
 
     private function searchRead(string $model, array $domain, array $fields, int $limit = 10): array
     {
+        return $this->searchReadWithOrder($model, $domain, $fields, $limit, 'id desc');
+    }
+
+    private function searchReadWithOrder(string $model, array $domain, array $fields, int $limit, string $order): array
+    {
         $uid = $this->getUid();
 
         $xml = $this->buildMethodCall('execute_kw', [
@@ -600,7 +661,7 @@ class OdooXmlRpc
             [
                 'fields' => $fields,
                 'limit' => max(1, min($limit, 30)),
-                'order' => 'id desc',
+                'order' => $order,
             ],
         ]);
 
@@ -608,6 +669,23 @@ class OdooXmlRpc
         $parsed = $this->parseXmlRpc($raw);
 
         return is_array($parsed) ? $parsed : [];
+    }
+
+    private function normalizeRateValue(array $row): ?float
+    {
+        $candidates = [
+            $row['rate'] ?? null,
+            $row['inverse_company_rate'] ?? null,
+            $row['inverse_rate'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_numeric($candidate)) {
+                return (float) $candidate;
+            }
+        }
+
+        return null;
     }
 
     /**

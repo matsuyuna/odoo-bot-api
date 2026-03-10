@@ -8,14 +8,16 @@ class BcvRate extends Model
 {
     protected $fillable = [
         'date',
-        'dollar',
+        'res_currency_rate',
+        'res_currency',
     ];
 
     protected function casts(): array
     {
         return [
             'date' => 'date',
-            'dollar' => 'float',
+            'res_currency_rate' => 'float',
+            'res_currency' => 'float',
         ];
     }
 }
