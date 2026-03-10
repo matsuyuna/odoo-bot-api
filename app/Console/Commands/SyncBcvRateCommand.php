@@ -3,131 +3,44 @@
 namespace App\Console\Commands;
 
 use App\Models\BcvRate;
+use App\Services\OdooXmlRpc;
 use Illuminate\Console\Command;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
-use Throwable;
 
 class SyncBcvRateCommand extends Command
 {
     protected $signature = 'bcv:rates:sync';
 
-    protected $description = 'Sincroniza la tasa BCV diaria desde el endpoint público';
+    protected $description = 'Sincroniza las tasas BCV desde Odoo (res.currency.rate y res.currency)';
 
     public function handle(): int
     {
-        $rateUrls = config('services.bcv.rate_urls', [
-            'https://api-bcv-pi.vercel.app/api/tasa',
-        ]);
-        $response = null;
-        $lastStatus = null;
-        $lastError = null;
+        $odoo = OdooXmlRpc::fromEnv();
+        $rates = $odoo->getLatestCurrencyRates();
 
-        foreach ($rateUrls as $rateUrl) {
-            try {
-                $currentResponse = Http::acceptJson()
-                    ->withHeaders([
-                        'User-Agent' => 'Mozilla/5.0 (compatible; odoo-bot-api/1.0; +https://example.com)',
-                    ])
-                    ->timeout(20)
-                    ->retry(3, 1000, throw: false)
-                    ->get($rateUrl);
-            } catch (ConnectionException $e) {
-                $lastError = sprintf('Fallo de conexión consultando %s: %s', $rateUrl, $e->getMessage());
-                $this->warn($lastError);
+        $date = (string) $rates['date'];
+        $resCurrencyRate = (float) $rates['res_currency_rate'];
+        $resCurrency = (float) $rates['res_currency'];
 
-                continue;
-            }
-
-            if ($currentResponse->successful()) {
-                $response = $currentResponse;
-
-                break;
-            }
-
-            $lastStatus = $currentResponse->status();
-            $lastError = sprintf(
-                'Respuesta no exitosa en %s (HTTP %s): %s',
-                $rateUrl,
-                $currentResponse->status(),
-                substr(trim($currentResponse->body()), 0, 200)
-            );
-            $this->warn($lastError);
+        if ($date === '') {
+            throw new RuntimeException('La fecha de tasa recibida desde Odoo es inválida.');
         }
-
-        if (!$response instanceof Response) {
-            throw new RuntimeException(
-                'No se pudo consultar la tasa BCV. Status: '
-                . ($lastStatus ?? 'N/A')
-                . ($lastError ? ' | Detalle: ' . $lastError : '')
-            );
-        }
-
-        $parsedRate = $this->extractRatePayload($response->json());
-
-        if (!is_array($parsedRate)) {
-            throw new RuntimeException(
-                'Respuesta inválida del API BCV. JSON recibido: '
-                . json_encode($response->json(), JSON_UNESCAPED_UNICODE)
-            );
-        }
-
-        $date = $parsedRate['date'];
-        $dollar = $parsedRate['dollar'];
 
         BcvRate::query()->updateOrCreate(
             ['date' => $date],
-            ['dollar' => (float) $dollar],
+            [
+                'res_currency_rate' => $resCurrencyRate,
+                'res_currency' => $resCurrency,
+            ],
         );
 
-        $this->info(sprintf('Tasa BCV sincronizada para %s: %.4f', $date, (float) $dollar));
+        $this->info(sprintf(
+            'Tasas BCV sincronizadas para %s: res.currency.rate=%.4f | res.currency=%.4f',
+            $date,
+            $resCurrencyRate,
+            $resCurrency,
+        ));
 
         return self::SUCCESS;
-    }
-
-    /**
-     * @return array{date:string,dollar:float}|null
-     */
-    private function extractRatePayload(mixed $payload): ?array
-    {
-        if (!is_array($payload)) {
-            return null;
-        }
-
-        // Formato legado: { "date": "...", "dollar": 123.45 }
-        if (isset($payload['date'], $payload['dollar']) && is_numeric($payload['dollar'])) {
-            return [
-                'date' => (string) $payload['date'],
-                'dollar' => (float) $payload['dollar'],
-            ];
-        }
-
-        // Formato api-bcv-pi /api/tasa: { "fecha_iso": "...", "tasas": { "USD": { "valor_num": 123.45 } } }
-        if (
-            isset($payload['fecha_iso'])
-            && isset($payload['tasas']['USD']['valor_num'])
-            && is_numeric($payload['tasas']['USD']['valor_num'])
-        ) {
-            return [
-                'date' => (string) $payload['fecha_iso'],
-                'dollar' => (float) $payload['tasas']['USD']['valor_num'],
-            ];
-        }
-
-        // Formato api-bcv-pi /api/tasa/usd: { "fecha_iso": "...", "valor": { "valor_num": 123.45 } }
-        if (
-            isset($payload['fecha_iso'])
-            && isset($payload['valor']['valor_num'])
-            && is_numeric($payload['valor']['valor_num'])
-        ) {
-            return [
-                'date' => (string) $payload['fecha_iso'],
-                'dollar' => (float) $payload['valor']['valor_num'],
-            ];
-        }
-
-        return null;
     }
 }
