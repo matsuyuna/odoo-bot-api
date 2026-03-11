@@ -248,7 +248,7 @@ class OdooXmlRpc
             $partnersByCommercialId[$commercialId][] = $partnerId;
         }
 
-        $orders = $this->searchReadRaw(
+        $saleOrders = $this->searchReadRaw(
             'sale.order',
             [
                 ['partner_id', 'in', $commercialIds],
@@ -258,6 +258,27 @@ class OdooXmlRpc
             5000,
             'date_order desc, id desc'
         );
+
+        $posOrders = $this->searchReadRaw(
+            'pos.order',
+            [
+                ['partner_id', 'in', $commercialIds],
+                ['state', 'in', ['paid', 'done', 'invoiced']],
+            ],
+            ['id', 'partner_id', 'date_order'],
+            5000,
+            'date_order desc, id desc'
+        );
+
+        $orders = [];
+        foreach ($saleOrders as $order) {
+            $order['_source_model'] = 'sale';
+            $orders[] = $order;
+        }
+        foreach ($posOrders as $order) {
+            $order['_source_model'] = 'pos';
+            $orders[] = $order;
+        }
 
         if (empty($orders)) {
             $emptyInsights = [];
@@ -272,7 +293,18 @@ class OdooXmlRpc
             return $emptyInsights;
         }
 
-        $orderIds = [];
+        usort($orders, function (array $a, array $b): int {
+            $dateA = (string) ($a['date_order'] ?? '');
+            $dateB = (string) ($b['date_order'] ?? '');
+            if ($dateA !== $dateB) {
+                return strcmp($dateB, $dateA);
+            }
+
+            return ((int) ($b['id'] ?? 0)) <=> ((int) ($a['id'] ?? 0));
+        });
+
+        $saleOrderIds = [];
+        $posOrderIds = [];
         $latestOrderByPartner = [];
 
         foreach ($orders as $order) {
@@ -281,53 +313,63 @@ class OdooXmlRpc
                 continue;
             }
 
+            $sourceModel = (string) ($order['_source_model'] ?? 'sale');
+            $orderKey = $sourceModel . ':' . $orderId;
+
             $partnerField = $order['partner_id'] ?? null;
-            $partnerId = is_array($partnerField) ? (int) ($partnerField[0] ?? 0) : (int) $partnerField;
-            if ($partnerId <= 0) {
+            $commercialPartnerId = is_array($partnerField) ? (int) ($partnerField[0] ?? 0) : (int) $partnerField;
+            if ($commercialPartnerId <= 0) {
                 continue;
             }
 
-            $orderIds[] = $orderId;
-            $targetPartnerIds = $partnersByCommercialId[$partnerId] ?? [$partnerId];
+            if ($sourceModel === 'pos') {
+                $posOrderIds[] = $orderId;
+            } else {
+                $saleOrderIds[] = $orderId;
+            }
 
+            $targetPartnerIds = $partnersByCommercialId[$commercialPartnerId] ?? [$commercialPartnerId];
             foreach ($targetPartnerIds as $targetPartnerId) {
                 if (!isset($latestOrderByPartner[$targetPartnerId])) {
-                    $latestOrderByPartner[$targetPartnerId] = $orderId;
+                    $latestOrderByPartner[$targetPartnerId] = $orderKey;
                 }
             }
         }
 
-        if (empty($orderIds)) {
-            $emptyInsights = [];
-            foreach ($partnerIds as $partnerId) {
-                $emptyInsights[$partnerId] = [
-                    'ultimo_producto_comprado' => '',
-                    'producto_mas_comprado' => '',
-                    'tiene_compras' => false,
-                ];
+        $saleLines = [];
+        if (!empty($saleOrderIds)) {
+            try {
+                $saleLines = $this->searchReadRaw(
+                    'sale.order.line',
+                    [
+                        ['order_id', 'in', array_values(array_unique($saleOrderIds))],
+                        ['display_type', '=', false],
+                    ],
+                    ['order_id', 'product_id', 'product_uom_qty'],
+                    10000,
+                    'id asc'
+                );
+            } catch (\Throwable) {
+                $saleLines = $this->searchReadRaw(
+                    'sale.order.line',
+                    [
+                        ['order_id', 'in', array_values(array_unique($saleOrderIds))],
+                    ],
+                    ['order_id', 'product_id', 'product_uom_qty'],
+                    10000,
+                    'id asc'
+                );
             }
-
-            return $emptyInsights;
         }
 
-        try {
-            $lines = $this->searchReadRaw(
-                'sale.order.line',
+        $posLines = [];
+        if (!empty($posOrderIds)) {
+            $posLines = $this->searchReadRaw(
+                'pos.order.line',
                 [
-                    ['order_id', 'in', array_values(array_unique($orderIds))],
-                    ['display_type', '=', false],
+                    ['order_id', 'in', array_values(array_unique($posOrderIds))],
                 ],
-                ['order_id', 'product_id', 'product_uom_qty'],
-                10000,
-                'id asc'
-            );
-        } catch (\Throwable) {
-            $lines = $this->searchReadRaw(
-                'sale.order.line',
-                [
-                    ['order_id', 'in', array_values(array_unique($orderIds))],
-                ],
-                ['order_id', 'product_id', 'product_uom_qty'],
+                ['order_id', 'product_id', 'qty'],
                 10000,
                 'id asc'
             );
@@ -340,40 +382,53 @@ class OdooXmlRpc
                 continue;
             }
 
+            $sourceModel = (string) ($order['_source_model'] ?? 'sale');
+            $orderKey = $sourceModel . ':' . $orderId;
+
             $partnerField = $order['partner_id'] ?? null;
-            $partnerId = is_array($partnerField) ? (int) ($partnerField[0] ?? 0) : (int) $partnerField;
-            if ($partnerId > 0) {
-                $orderPartnerMap[$orderId] = $partnersByCommercialId[$partnerId] ?? [$partnerId];
+            $commercialPartnerId = is_array($partnerField) ? (int) ($partnerField[0] ?? 0) : (int) $partnerField;
+            if ($commercialPartnerId > 0) {
+                $orderPartnerMap[$orderKey] = $partnersByCommercialId[$commercialPartnerId] ?? [$commercialPartnerId];
             }
         }
 
         $lastProductsByPartner = [];
         $qtyByPartner = [];
 
-        foreach ($lines as $line) {
+        $appendLine = function (array $line, string $sourceModel, string $qtyField) use (&$orderPartnerMap, &$qtyByPartner, &$lastProductsByPartner, &$latestOrderByPartner): void {
             $orderField = $line['order_id'] ?? null;
             $orderId = is_array($orderField) ? (int) ($orderField[0] ?? 0) : (int) $orderField;
-            if ($orderId <= 0 || !isset($orderPartnerMap[$orderId])) {
-                continue;
+            $orderKey = $sourceModel . ':' . $orderId;
+
+            if ($orderId <= 0 || !isset($orderPartnerMap[$orderKey])) {
+                return;
             }
 
-            $targetPartnerIds = $orderPartnerMap[$orderId];
+            $targetPartnerIds = $orderPartnerMap[$orderKey];
             $productField = $line['product_id'] ?? null;
             $productId = is_array($productField) ? (int) ($productField[0] ?? 0) : 0;
             $productName = is_array($productField) ? trim((string) ($productField[1] ?? '')) : '';
             if ($productId <= 0 || $productName === '') {
-                continue;
+                return;
             }
 
-            $qty = (float) ($line['product_uom_qty'] ?? 0);
+            $qty = (float) ($line[$qtyField] ?? 0);
 
             foreach ($targetPartnerIds as $partnerId) {
                 $qtyByPartner[$partnerId][$productName] = ($qtyByPartner[$partnerId][$productName] ?? 0.0) + $qty;
 
-                if (($latestOrderByPartner[$partnerId] ?? null) === $orderId) {
+                if (($latestOrderByPartner[$partnerId] ?? null) === $orderKey) {
                     $lastProductsByPartner[$partnerId][$productName] = true;
                 }
             }
+        };
+
+        foreach ($saleLines as $line) {
+            $appendLine($line, 'sale', 'product_uom_qty');
+        }
+
+        foreach ($posLines as $line) {
+            $appendLine($line, 'pos', 'qty');
         }
 
         $insights = [];
