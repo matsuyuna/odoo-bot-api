@@ -42,6 +42,12 @@
                 <label>Nombre</label>
                 <input type="text" name="name" placeholder="Contacto de prueba" required>
 
+                <label>Producto más comprado</label>
+                <input type="text" name="producto_mas_comprado" placeholder="Acetaminofén 500mg">
+
+                <label>Último producto comprado</label>
+                <input type="text" name="ultimo_producto_comprado" placeholder="Vitamina C 1g">
+
                 <button type="submit">Enviar a WATI</button>
             </form>
             @if($errors->any())
@@ -67,6 +73,8 @@
                         <th>Nombre</th>
                         <th>Teléfono</th>
                         <th>ID</th>
+                        <th>Producto más comprado</th>
+                        <th>Último producto comprado</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -75,10 +83,12 @@
                             <td>{{ $contact['name'] ?? $contact['fullName'] ?? '-' }}</td>
                             <td>{{ $contact['phone'] ?? $contact['waId'] ?? '-' }}</td>
                             <td>{{ $contact['id'] ?? '-' }}</td>
+                            <td>{{ $contact['producto_mas_comprado'] ?: '-' }}</td>
+                            <td>{{ $contact['ultimo_producto_comprado'] ?: '-' }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="3">Sin contactos para mostrar</td>
+                            <td colspan="5">Sin contactos para mostrar</td>
                         </tr>
                     @endforelse
                 </tbody>

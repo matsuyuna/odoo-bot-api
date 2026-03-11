@@ -22,7 +22,15 @@ class WatiMonitorControllerTest extends TestCase
         Http::fake([
             'https://wati.test/10101449/api/v1/getContacts*' => Http::response([
                 'contacts' => [
-                    ['id' => 1, 'name' => 'Ana', 'phone' => '584111111111'],
+                    [
+                        'id' => 1,
+                        'name' => 'Ana',
+                        'phone' => '584111111111',
+                        'customParams' => [
+                            ['name' => 'productomascomprado', 'value' => 'Acetaminofén 500mg'],
+                            ['name' => 'ultimoproductocomprado', 'value' => 'Vitamina C 1g'],
+                        ],
+                    ],
                 ],
             ], 200),
         ]);
@@ -31,6 +39,8 @@ class WatiMonitorControllerTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Ana');
+        $response->assertSee('Acetaminofén 500mg');
+        $response->assertSee('Vitamina C 1g');
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), 'pageSize=5')
@@ -50,11 +60,23 @@ class WatiMonitorControllerTest extends TestCase
         $response = $this->post('/wati/monitor/contactos', [
             'phone' => '584244162964',
             'name' => 'Prueba WATI',
+            'producto_mas_comprado' => 'Acetaminofén 500mg',
+            'ultimo_producto_comprado' => 'Vitamina C 1g',
         ]);
 
         $response->assertRedirect('/wati/monitor');
 
-        Http::assertSent(fn ($request) => $request->method() === 'POST'
-            && str_starts_with($request->url(), 'https://wati.test/10101449/api/v1/addContact/584244162964'));
+
+        Http::assertSent(function ($request) {
+            if ($request->method() !== 'POST' || !str_starts_with($request->url(), 'https://wati.test/10101449/api/v1/addContact/584244162964')) {
+                return false;
+            }
+
+            $payload = $request->data();
+            $customParams = collect($payload['customParams'] ?? [])->keyBy('name');
+
+            return ($customParams['producto_mas_comprado']['value'] ?? null) === 'Acetaminofén 500mg'
+                && ($customParams['ultimo_producto_comprado']['value'] ?? null) === 'Vitamina C 1g';
+        });
     }
 }
