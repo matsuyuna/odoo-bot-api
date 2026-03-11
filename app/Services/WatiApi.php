@@ -130,18 +130,102 @@ class WatiApi
             return ['contacts' => [], 'has_more' => false, 'raw' => $res->body()];
         }
 
-        $contacts = $payload['contacts'] ?? $payload['result'] ?? $payload['data'] ?? [];
-        if (!is_array($contacts)) {
-            $contacts = [];
-        }
-
-        $hasMore = (bool) ($payload['hasMore'] ?? $payload['has_more'] ?? false);
+        $contacts = $this->extractContacts($payload);
+        $hasMore = $this->extractHasMore($payload, $contacts, $pageSize);
 
         return [
             'contacts' => array_values(array_filter($contacts, fn ($item) => is_array($item))),
             'has_more' => $hasMore,
             'raw' => $payload,
         ];
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<int,array<string,mixed>>
+     */
+    private function extractContacts(array $payload): array
+    {
+        $candidates = [
+            $payload['contacts'] ?? null,
+            $payload['contact_list'] ?? null,
+            $payload['contactList'] ?? null,
+            $payload['result'] ?? null,
+            $payload['data'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            $rows = $this->extractContactRows($candidate);
+            if ($rows !== []) {
+                return $rows;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param mixed $candidate
+     * @return array<int,array<string,mixed>>
+     */
+    private function extractContactRows(mixed $candidate): array
+    {
+        if (!is_array($candidate)) {
+            return [];
+        }
+
+        if ($this->isSequentialArray($candidate)) {
+            return array_values(array_filter($candidate, fn ($item) => is_array($item)));
+        }
+
+        foreach (['contacts', 'contact_list', 'contactList', 'items', 'rows', 'results', 'data'] as $key) {
+            if (!array_key_exists($key, $candidate)) {
+                continue;
+            }
+
+            $rows = $this->extractContactRows($candidate[$key]);
+            if ($rows !== []) {
+                return $rows;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @param array<int,array<string,mixed>> $contacts
+     */
+    private function extractHasMore(array $payload, array $contacts, int $pageSize): bool
+    {
+        foreach (['hasMore', 'has_more', 'hasNextPage', 'has_next_page'] as $key) {
+            if (array_key_exists($key, $payload)) {
+                return (bool) $payload[$key];
+            }
+        }
+
+        foreach (['result', 'data'] as $key) {
+            $container = $payload[$key] ?? null;
+            if (!is_array($container)) {
+                continue;
+            }
+
+            foreach (['hasMore', 'has_more', 'hasNextPage', 'has_next_page'] as $nestedKey) {
+                if (array_key_exists($nestedKey, $container)) {
+                    return (bool) $container[$nestedKey];
+                }
+            }
+        }
+
+        return count($contacts) >= $pageSize;
+    }
+
+    /**
+     * @param array<int|string,mixed> $items
+     */
+    private function isSequentialArray(array $items): bool
+    {
+        return array_keys($items) === range(0, count($items) - 1);
     }
 
     private function resolveTenantBaseUrl(): string
