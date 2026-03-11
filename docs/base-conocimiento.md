@@ -30,8 +30,9 @@ Archivo clave:
 - Estructura de contacto normalizada para downstream (incluye `preferred_whatsapp`).
 - Flujo de sincronización y cola en `odoo_contact_syncs`.
 - En sincronización Odoo → WATI se consulta compras del cliente en Odoo:
-  - Modelo de órdenes: `sale.order` (filtrado por estados `sale` y `done`).
-  - Modelo de líneas: `sale.order.line` para extraer productos comprados.
+  - Modelos de órdenes: `sale.order` (estados `sale` y `done`) y `pos.order` (estados `paid`, `done`, `invoiced`).
+  - Modelos de líneas: `sale.order.line` y `pos.order.line` para extraer productos comprados.
+  - Los insights se calculan por `commercial_partner_id` para no perder compras cuando el contacto es una sucursal/contacto hijo.
   - Se persisten dos insights en la cola local: `ultimo_producto_comprado` y `producto_mas_comprado` (vacíos si el cliente no tiene compras).
   - Al enviar a WATI se mapean en atributos `ultimoproductocomprado` y `productomascomprado`.
 - Normalización de teléfonos de Venezuela por canal:
@@ -45,6 +46,7 @@ Archivos clave:
 - `app/Console/Commands/SyncOdooContactsToQueueCommand.php`
 - `app/Console/Commands/PushPendingContactsToWatiCommand.php`
 - `app/Console/Commands/SyncWatiContactsToOdooCommand.php`
+- `app/Console/Commands/InspectOdooOrderModelsCommand.php` (acepta `--partner-ids` y los resuelve a `commercial_partner_id` para alinear con la sincronización).
 - `app/Support/VenezuelanPhoneFormatter.php`
 
 ### 3) Dominio BCV / precios en bolívares
