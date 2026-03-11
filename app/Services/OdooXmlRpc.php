@@ -442,13 +442,27 @@ class OdooXmlRpc
     /**
      * Inspecciona modelos relacionados a pedidos de venta/compra para validar dónde vive el historial.
      *
+     * Si recibe partner IDs, replica la lógica de sincronización: filtra por `commercial_partner_id`
+     * para evitar falsos vacíos cuando las órdenes están en la casa matriz.
+     *
      * @param int[] $partnerIds
-     * @return array<int,array{model:string,domain:array<int,mixed>,available_fields:array<int,string>,sample_rows:array<int,array<string,mixed>>,error?:string}>
+     * @return array<int,array{model:string,domain:array<int,mixed>,available_fields:array<int,string>,sample_rows:array<int,array<string,mixed>>,input_partner_ids:array<int,int>,commercial_partner_ids:array<int,int>,partner_to_commercial:array<int,int>,error?:string}>
      */
     public function inspectOrderRelatedModels(array $partnerIds = [], int $limit = 5): array
     {
         $limit = max(1, min($limit, 30));
         $partnerIds = array_values(array_unique(array_filter(array_map('intval', $partnerIds), fn (int $id): bool => $id > 0)));
+
+        $partnerToCommercial = [];
+        $commercialPartnerIds = [];
+
+        if (!empty($partnerIds)) {
+            $partnerToCommercial = $this->getCommercialPartnerIds($partnerIds);
+            $commercialPartnerIds = array_values(array_unique(array_map(
+                fn (int $partnerId): int => $partnerToCommercial[$partnerId] ?? $partnerId,
+                $partnerIds,
+            )));
+        }
 
         $models = [
             ['model' => 'sale.order', 'fields' => ['id', 'name', 'partner_id', 'state', 'date_order', 'create_date']],
@@ -465,11 +479,11 @@ class OdooXmlRpc
             $model = $meta['model'];
             $domain = [];
 
-            if (!empty($partnerIds)) {
+            if (!empty($commercialPartnerIds)) {
                 if (str_ends_with($model, '.line')) {
-                    $domain[] = ['order_id.partner_id', 'in', $partnerIds];
+                    $domain[] = ['order_id.partner_id', 'in', $commercialPartnerIds];
                 } else {
-                    $domain[] = ['partner_id', 'in', $partnerIds];
+                    $domain[] = ['partner_id', 'in', $commercialPartnerIds];
                 }
             }
 
@@ -482,6 +496,9 @@ class OdooXmlRpc
                     'domain' => $domain,
                     'available_fields' => $availableFields,
                     'sample_rows' => $sampleRows,
+                    'input_partner_ids' => $partnerIds,
+                    'commercial_partner_ids' => $commercialPartnerIds,
+                    'partner_to_commercial' => $partnerToCommercial,
                 ];
             } catch (\Throwable $e) {
                 $report[] = [
@@ -489,6 +506,9 @@ class OdooXmlRpc
                     'domain' => $domain,
                     'available_fields' => [],
                     'sample_rows' => [],
+                    'input_partner_ids' => $partnerIds,
+                    'commercial_partner_ids' => $commercialPartnerIds,
+                    'partner_to_commercial' => $partnerToCommercial,
                     'error' => $e->getMessage(),
                 ];
             }

@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 class InspectOdooOrderModelsCommand extends Command
 {
     protected $signature = 'odoo:orders:inspect
-        {--partner-ids= : IDs de res.partner separados por coma para filtrar muestras}
+        {--partner-ids= : IDs de res.partner separados por coma (contactos/sucursales o empresa)}
         {--limit=5 : Máximo de filas por modelo para muestreo}';
 
     protected $description = 'Inspecciona modelos de pedidos/órdenes en Odoo para validar dónde hay historial de compra';
@@ -34,6 +34,12 @@ class InspectOdooOrderModelsCommand extends Command
             if (!empty($item['error'])) {
                 $this->warn('No accesible: ' . $item['error']);
                 continue;
+            }
+
+            if (!empty($item['input_partner_ids'])) {
+                $this->line('Partner IDs recibidos: ' . implode(', ', $item['input_partner_ids']));
+                $this->line('Commercial partner IDs usados: ' . implode(', ', $item['commercial_partner_ids']));
+                $this->line('Mapa partner->commercial: ' . json_encode($item['partner_to_commercial'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
             }
 
             $this->line('Campos disponibles: ' . implode(', ', $item['available_fields']));

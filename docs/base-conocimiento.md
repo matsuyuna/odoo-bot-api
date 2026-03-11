@@ -46,7 +46,7 @@ Archivos clave:
 - `app/Console/Commands/SyncOdooContactsToQueueCommand.php`
 - `app/Console/Commands/PushPendingContactsToWatiCommand.php`
 - `app/Console/Commands/SyncWatiContactsToOdooCommand.php`
-- `app/Console/Commands/InspectOdooOrderModelsCommand.php`
+- `app/Console/Commands/InspectOdooOrderModelsCommand.php` (acepta `--partner-ids` y los resuelve a `commercial_partner_id` para alinear con la sincronización).
 - `app/Support/VenezuelanPhoneFormatter.php`
 
 ### 3) Dominio BCV / precios en bolívares
