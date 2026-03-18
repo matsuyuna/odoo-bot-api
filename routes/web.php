@@ -40,7 +40,5 @@ Route::get('/probar-odoo', function () {
 
 Route::get('/wati/monitor', [WatiMonitorController::class, 'index'])->name('wati.monitor');
 Route::post('/wati/monitor/contactos', [WatiMonitorController::class, 'storeContact'])->name('wati.monitor.store');
-Route::get('/wati/monitor/', [WatiMonitorController::class, 'index']);
 Route::get('/public/wati/monitor', [WatiMonitorController::class, 'index']);
-Route::get('/public/wati/monitor/', [WatiMonitorController::class, 'index']);
 Route::post('/public/wati/monitor/contactos', [WatiMonitorController::class, 'storeContact']);
