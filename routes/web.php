@@ -40,3 +40,6 @@ Route::get('/probar-odoo', function () {
 
 Route::get('/wati/monitor', [WatiMonitorController::class, 'index'])->name('wati.monitor');
 Route::post('/wati/monitor/contactos', [WatiMonitorController::class, 'storeContact'])->name('wati.monitor.store');
+Route::redirect('/wati/monitor/', '/wati/monitor', 301);
+Route::redirect('/public/wati/monitor', '/wati/monitor', 301);
+Route::redirect('/public/wati/monitor/', '/wati/monitor', 301);
