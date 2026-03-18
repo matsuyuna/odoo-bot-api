@@ -1,4 +1,4 @@
-name: Deploy Odoo bot to cPanel via SFTP
+name: Deploy Odoo bot to cPanel via FTP/FTPS
 
 on:
   push:
@@ -11,19 +11,50 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Copiar .env-main como env
-        run: cp env-main env
+      - name: Copiar .env-main como .env
+        run: cp env-main .env
 
-      - name: renombrar env como .env
-        run: mv env .env
-        
-      - name: Deploy to FTP
+      - name: Resolver configuración de deploy
+        run: |
+          SERVER="${{ secrets.FTP_SERVER }}"
+          USERNAME="${{ secrets.FTP_USERNAME }}"
+          PASSWORD="${{ secrets.FTP_PASSWORD }}"
+          SERVER_DIR="${{ secrets.FTP_SERVER_DIR }}"
+          PORT="${{ secrets.FTP_PORT }}"
+          PROTOCOL="${{ secrets.FTP_PROTOCOL }}"
+
+          # Fallback histórico para secretos SFTP_*
+          [ -z "$SERVER" ] && SERVER="${{ secrets.SFTP_HOST }}"
+          [ -z "$USERNAME" ] && USERNAME="${{ secrets.SFTP_USERNAME }}"
+          [ -z "$PASSWORD" ] && PASSWORD="${{ secrets.SFTP_PASSWORD }}"
+
+          # Ruta por defecto solo si no hay secreto explícito
+          [ -z "$SERVER_DIR" ] && SERVER_DIR="/home/linoxrfm/public_html/odoo-bot-api/"
+          [ -z "$PORT" ] && PORT="21"
+          [ -z "$PROTOCOL" ] && PROTOCOL="ftps"
+
+          # Normalizar slash final
+          case "$SERVER_DIR" in
+            */) ;;
+            *) SERVER_DIR="$SERVER_DIR/" ;;
+          esac
+
+          echo "server=$SERVER" >> "$GITHUB_OUTPUT"
+          echo "username=$USERNAME" >> "$GITHUB_OUTPUT"
+          echo "password=$PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "server_dir=$SERVER_DIR" >> "$GITHUB_OUTPUT"
+          echo "port=$PORT" >> "$GITHUB_OUTPUT"
+          echo "protocol=$PROTOCOL" >> "$GITHUB_OUTPUT"
+        id: cfg
+
+      - name: Deploy to FTP/FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ${{ secrets.SFTP_HOST }}
-          username: ${{ secrets.SFTP_USERNAME }}
-          password: ${{ secrets.SFTP_PASSWORD }}
-          port: 21
-          server-dir: "/home/linoxrfm/public_html/odoo-api/"
+          server: ${{ steps.cfg.outputs.server }}
+          username: ${{ steps.cfg.outputs.username }}
+          password: ${{ steps.cfg.outputs.password }}
+          port: ${{ steps.cfg.outputs.port }}
+          protocol: ${{ steps.cfg.outputs.protocol }}
+          server-dir: ${{ steps.cfg.outputs.server_dir }}
