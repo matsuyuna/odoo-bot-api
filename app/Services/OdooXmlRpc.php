@@ -393,6 +393,7 @@ class OdooXmlRpc
         }
 
         $lastProductsByPartner = [];
+        $lastProductIndexByPartner = [];
         $qtyByPartner = [];
 
         $appendLine = function (array $line, string $sourceModel, string $qtyField) use (&$orderPartnerMap, &$qtyByPartner, &$lastProductsByPartner, &$latestOrderByPartner): void {
@@ -418,7 +419,11 @@ class OdooXmlRpc
                 $qtyByPartner[$partnerId][$productName] = ($qtyByPartner[$partnerId][$productName] ?? 0.0) + $qty;
 
                 if (($latestOrderByPartner[$partnerId] ?? null) === $orderKey) {
-                    $lastProductsByPartner[$partnerId][$productName] = true;
+                    $normalizedProductName = mb_strtolower($productName);
+                    if (!isset($lastProductIndexByPartner[$partnerId][$normalizedProductName])) {
+                        $lastProductIndexByPartner[$partnerId][$normalizedProductName] = true;
+                        $lastProductsByPartner[$partnerId][] = $productName;
+                    }
                 }
             }
         };
@@ -435,7 +440,7 @@ class OdooXmlRpc
 
         foreach ($partnerIds as $partnerId) {
             $lastProducts = isset($lastProductsByPartner[$partnerId])
-                ? implode(', ', array_keys($lastProductsByPartner[$partnerId]))
+                ? implode(', ', $lastProductsByPartner[$partnerId])
                 : '';
 
             $mostPurchased = '';
