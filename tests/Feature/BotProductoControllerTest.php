@@ -129,6 +129,7 @@ class BotProductoControllerTest extends TestCase
         Http::fake([
             'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
             'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->emptyNameSearchXml(), 200)
                 ->push($this->nameSearchTirzepatideXml(), 200)
                 ->push($this->productReadTirzepatidaXml(), 200),
         ]);
@@ -140,6 +141,25 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonCount(2)
             ->assertJsonPath('0.name', 'Tirzepatida 5mg')
             ->assertJsonPath('1.name', 'Triprolidina Jarabe');
+    }
+
+    public function test_buscar_objcompleto_usa_fallback_por_prefijo_si_name_search_no_consigue(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->emptyNameSearchXml(), 200) // tirzepatide
+                ->push($this->emptyNameSearchXml(), 200) // tirzepatida (variante)
+                ->push($this->searchReadPrefixTirzepatidaXml(), 200) // fallback por prefijo
+                ->push($this->productReadSingleTirzepatidaXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=tirzepatide');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.name', 'Tirzepatida 5mg');
     }
 
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
@@ -263,6 +283,25 @@ XML;
 XML;
     }
 
+    private function emptyNameSearchXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
     private function productReadXml(): string
     {
         return <<<'XML'
@@ -322,6 +361,60 @@ XML;
                 <member><name>barcode</name><value><string>33333</string></value></member>
               </struct>
             </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>701</int></value></member>
+                <member><name>name</name><value><string>Tirzepatida 5mg</string></value></member>
+                <member><name>default_code</name><value><string>TIR5</string></value></member>
+                <member><name>qty_available</name><value><double>3</double></value></member>
+                <member><name>lst_price</name><value><double>50.0</double></value></member>
+                <member><name>barcode</name><value><string>44444</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function searchReadPrefixTirzepatidaXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>701</int></value></member>
+                <member><name>name</name><value><string>Tirzepatida 5mg</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productReadSingleTirzepatidaXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
             <value>
               <struct>
                 <member><name>id</name><value><int>701</int></value></member>
