@@ -193,7 +193,7 @@ tail -n 200 /home/USUARIO/laravel-schedule.log
 En este proyecto la tarea BCV está definida así:
 
 - Comando: `bcv:rates:sync`
-- Cron: `BCV_SYNC_CRON` desde `.env`, con fallback `0 5 * * *` (05:00 diario) si no está definido.
+- Cron: `BCV_SYNC_CRON` desde `.env`, con fallback `0 * * * *` (cada hora) si no está definido.
 
 Si al ejecutar manualmente `php artisan bcv:rates:sync` funciona, el problema no es el comando sino el cron del sistema.
 Para confirmar que scheduler lo tiene registrado:
@@ -217,7 +217,7 @@ cd /home/USUARIO/RUTA_DEL_PROYECTO
 /usr/local/bin/php artisan schedule:run -v
 ```
 
-Después de validar, vuelve `BCV_SYNC_CRON` a su valor normal (por ejemplo `0 5 * * *`).
+Después de validar, vuelve `BCV_SYNC_CRON` a su valor normal (por ejemplo `0 * * * *`).
 
 ### 7.4 Comando alterno para Laravel 12 (worker continuo)
 

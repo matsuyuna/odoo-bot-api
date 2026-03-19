@@ -30,5 +30,5 @@ Schedule::command('wati:contacts:pull --page-size=100 --max-pages=2')
     ->withoutOverlapping();
 
 Schedule::command('bcv:rates:sync')
-    ->cron((string) env('BCV_SYNC_CRON', '0 5 * * *'))
+    ->cron((string) env('BCV_SYNC_CRON', '0 * * * *'))
     ->withoutOverlapping();
