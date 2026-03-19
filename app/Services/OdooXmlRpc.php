@@ -95,6 +95,7 @@ class OdooXmlRpc
         $rows = $this->read('product.product', $idsFinal, [
             'id', 'name', 'default_code', 'qty_available', 'barcode', 'lst_price'
         ]);
+        $rows = $this->sortProductsByRelevance($rows, $query);
 
         $qtyByProductId = [];
         $storeLocationIds = $this->getStoreLocationIds();
@@ -117,6 +118,122 @@ class OdooXmlRpc
         }
 
         return $out;
+    }
+
+    /**
+     * Ordena productos por similitud textual con la query del usuario sin cambiar
+     * el contrato del método. Esto permite priorizar coincidencias cercanas
+     * (ej: "tirzepatide" -> "Tirzepatida").
+     *
+     * @param array<int,array<string,mixed>> $rows
+     * @return array<int,array<string,mixed>>
+     */
+    private function sortProductsByRelevance(array $rows, string $query): array
+    {
+        if (count($rows) <= 1) {
+            return $rows;
+        }
+
+        $normalizedQuery = $this->normalizeSearchText($query);
+        if ($normalizedQuery === '') {
+            return $rows;
+        }
+
+        $tokens = $this->tokenizeQuery($normalizedQuery);
+        if (empty($tokens)) {
+            $tokens = array_values(array_filter(explode(' ', $normalizedQuery)));
+        }
+
+        $indexedRows = [];
+        foreach ($rows as $index => $row) {
+            $indexedRows[] = [
+                'index' => $index,
+                'score' => $this->productRelevanceScore($row, $normalizedQuery, $tokens),
+                'row' => $row,
+            ];
+        }
+
+        usort($indexedRows, function (array $a, array $b): int {
+            $scoreCompare = $b['score'] <=> $a['score'];
+            if ($scoreCompare !== 0) {
+                return $scoreCompare;
+            }
+
+            return $a['index'] <=> $b['index'];
+        });
+
+        return array_map(fn (array $item): array => $item['row'], $indexedRows);
+    }
+
+    /**
+     * @param array<string,mixed> $product
+     * @param string[] $queryTokens
+     */
+    private function productRelevanceScore(array $product, string $normalizedQuery, array $queryTokens): float
+    {
+        $name = $this->normalizeSearchText((string) ($product['name'] ?? ''));
+        $code = $this->normalizeSearchText((string) ($product['default_code'] ?? ''));
+        $haystack = trim($name . ' ' . $code);
+
+        if ($haystack === '') {
+            return 0.0;
+        }
+
+        $containsBonus = str_contains($haystack, $normalizedQuery) ? 1.0 : 0.0;
+        $startsBonus = str_starts_with($haystack, $normalizedQuery) ? 1.0 : 0.0;
+
+        $maxLen = max(mb_strlen($normalizedQuery), mb_strlen($haystack));
+        $levScore = 0.0;
+        if ($maxLen > 0) {
+            $levDistance = levenshtein($normalizedQuery, $haystack);
+            $levScore = max(0.0, 1 - ($levDistance / $maxLen));
+        }
+
+        $tokenScores = [];
+        foreach ($queryTokens as $queryToken) {
+            $queryToken = trim($queryToken);
+            if ($queryToken === '') {
+                continue;
+            }
+
+            $similarity = 0.0;
+            similar_text($queryToken, $haystack, $similarityPercent);
+            $similarity = max($similarity, $similarityPercent / 100);
+
+            if (str_contains($haystack, $queryToken)) {
+                $similarity = max($similarity, 1.0);
+            }
+
+            $tokenScores[] = $similarity;
+        }
+
+        $tokenAverage = empty($tokenScores)
+            ? 0.0
+            : (array_sum($tokenScores) / count($tokenScores));
+
+        // Pesos para priorizar coincidencia real, pero permitiendo typo/cambios mínimos.
+        $score = ($tokenAverage * 0.60)
+            + ($levScore * 0.25)
+            + ($containsBonus * 0.10)
+            + ($startsBonus * 0.05);
+
+        return round($score, 6);
+    }
+
+    private function normalizeSearchText(string $value): string
+    {
+        $value = mb_strtolower(trim($value));
+        $value = strtr($value, [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u',
+            'ä' => 'a', 'ë' => 'e', 'ï' => 'i', 'ö' => 'o', 'ü' => 'u',
+            'à' => 'a', 'è' => 'e', 'ì' => 'i', 'ò' => 'o', 'ù' => 'u',
+            'â' => 'a', 'ê' => 'e', 'î' => 'i', 'ô' => 'o', 'û' => 'u',
+            'ñ' => 'n',
+        ]);
+        $value = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $value);
+        $value = preg_replace('/\s+/', ' ', (string) $value);
+
+        return trim((string) $value);
     }
 
     /**
