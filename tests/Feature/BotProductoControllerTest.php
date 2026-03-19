@@ -129,6 +129,7 @@ class BotProductoControllerTest extends TestCase
         Http::fake([
             'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
             'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->emptyNameSearchXml(), 200)
                 ->push($this->nameSearchTirzepatideXml(), 200)
                 ->push($this->productReadTirzepatidaXml(), 200),
         ]);
@@ -254,6 +255,25 @@ XML;
                 </data>
               </array>
             </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function emptyNameSearchXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
           </data>
         </array>
       </value>

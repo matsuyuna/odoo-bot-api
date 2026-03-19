@@ -70,7 +70,7 @@ class OdooXmlRpc
 
         $idSets = [];
         foreach ($tokens as $t) {
-            $pairs = $this->nameSearch('product.product', $t, $limit * 3); // más amplio para poder intersectar
+            $pairs = $this->nameSearchByTermVariants('product.product', $t, $limit * 3);
             $ids = array_values(array_filter(array_map(fn($p) => $p[0] ?? null, $pairs), fn($x) => is_int($x)));
             $idSets[] = $ids;
         }
@@ -83,7 +83,7 @@ class OdooXmlRpc
 
         // Si no hubo intersección, fallback: usa solo el primer token (mejor UX)
         if (!$idsFinal) {
-            $pairs = $this->nameSearch('product.product', $tokens[0], $limit * 2);
+            $pairs = $this->nameSearchByTermVariants('product.product', $tokens[0], $limit * 2);
             $idsFinal = array_values(array_filter(array_map(fn($p) => $p[0] ?? null, $pairs), fn($x) => is_int($x)));
         }
 
@@ -118,6 +118,75 @@ class OdooXmlRpc
         }
 
         return $out;
+    }
+
+    /**
+     * Ejecuta name_search con variantes de término y une resultados preservando orden.
+     *
+     * @return array<int,mixed>
+     */
+    private function nameSearchByTermVariants(string $model, string $term, int $limit): array
+    {
+        $variants = $this->expandSearchTermVariants($term);
+        $merged = [];
+        $seenIds = [];
+
+        foreach ($variants as $variant) {
+            $pairs = $this->nameSearch($model, $variant, $limit);
+            foreach ($pairs as $pair) {
+                $id = $pair[0] ?? null;
+                if (!is_int($id)) {
+                    continue;
+                }
+
+                if (isset($seenIds[$id])) {
+                    continue;
+                }
+
+                $seenIds[$id] = true;
+                $merged[] = $pair;
+
+                if (count($merged) >= $limit) {
+                    return $merged;
+                }
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
+     * Crea variantes de un token para tolerar cambios de idioma/escritura
+     * comunes (ej: tirzepatide <-> tirzepatida).
+     *
+     * @return string[]
+     */
+    private function expandSearchTermVariants(string $term): array
+    {
+        $term = trim(mb_strtolower($term));
+        if ($term === '') {
+            return [];
+        }
+
+        $variants = [$term];
+
+        if (preg_match('/ide$/', $term)) {
+            $variants[] = preg_replace('/ide$/', 'ida', $term);
+        }
+        if (preg_match('/ida$/', $term)) {
+            $variants[] = preg_replace('/ida$/', 'ide', $term);
+        }
+
+        $unique = [];
+        foreach ($variants as $variant) {
+            $variant = trim((string) $variant);
+            if ($variant === '' || in_array($variant, $unique, true)) {
+                continue;
+            }
+            $unique[] = $variant;
+        }
+
+        return $unique;
     }
 
     /**
