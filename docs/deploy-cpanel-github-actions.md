@@ -106,6 +106,129 @@ Si quieres esta variante, te configuro un workflow por SSH (más confiable que F
 - `.env` ausente o con `APP_KEY` inválida.
 - Permisos en `storage/` y `bootstrap/cache/`.
 
+## 7) Cron de Laravel en cPanel (configuración y prueba)
+
+Si “no se ejecutó ninguno” de los jobs de Laravel, en cPanel casi siempre es por:
+
+- Cron apuntando a un `php` incorrecto.
+- Ruta equivocada al proyecto (`artisan` no existe ahí).
+- Cron configurado en otra cuenta/subdominio.
+- Permisos o `.env` incorrecto (el comando corre pero falla internamente).
+
+### 7.1 Verificar versión de Laravel del proyecto
+
+Este proyecto usa Laravel `^12.0` y en el lock actual está en `v12.20.0`.
+
+Para verificar en servidor:
+
+```bash
+cd /home/USUARIO/RUTA_DEL_PROYECTO
+/usr/local/bin/php artisan --version
+```
+
+Si falla por `vendor/autoload.php`, ejecuta primero:
+
+```bash
+cd /home/USUARIO/RUTA_DEL_PROYECTO
+composer install --no-dev --optimize-autoloader
+```
+
+### 7.2 Cron correcto en cPanel
+
+En **cPanel → Cron Jobs**, agrega este comando (cada minuto):
+
+```bash
+* * * * * cd /home/USUARIO/RUTA_DEL_PROYECTO && /usr/local/bin/php artisan schedule:run >> /home/USUARIO/laravel-schedule.log 2>&1
+```
+
+Ejemplo real (usuario `linoxrfm`):
+
+```bash
+* * * * * cd /home/linoxrfm/odoo-bot-api && /usr/local/bin/php artisan schedule:run >> /home/linoxrfm/laravel-schedule.log 2>&1
+```
+
+> Importante en la interfaz de cPanel: **no pegues los 5 asteriscos en “Command”** cuando usas el formulario con campos `Minute/Hour/Day/Month/Weekday`.
+> - En ese formulario, coloca `*` en cada campo de tiempo (o usa `Common Settings -> Once Per Minute`).
+> - En `Command` pega **solo**:
+>
+> ```bash
+> cd /home/linoxrfm/odoo-bot-api && /usr/local/bin/php artisan schedule:run >> /home/linoxrfm/laravel-schedule.log 2>&1
+> ```
+>
+> El error “You did not format the date and time settings correctly.” aparece cuando los campos de tiempo están vacíos/incorrectos.
+
+Notas:
+
+- Cambia `/usr/local/bin/php` si tu hosting usa otro binario (por ejemplo `ea-php82`).
+- El cron de Laravel debe correr **cada minuto**; los horarios reales los decide `routes/console.php`.
+- El log redirigido ayuda a ver errores silenciosos.
+
+### 7.3 Probar que sí está funcionando
+
+1. Ejecuta manualmente:
+
+```bash
+cd /home/USUARIO/RUTA_DEL_PROYECTO
+/usr/local/bin/php artisan schedule:run -v
+```
+
+2. Revisa próximos jobs:
+
+```bash
+cd /home/USUARIO/RUTA_DEL_PROYECTO
+/usr/local/bin/php artisan schedule:list
+```
+
+3. Revisa logs:
+
+```bash
+tail -n 200 storage/logs/laravel.log
+tail -n 200 /home/USUARIO/laravel-schedule.log
+```
+
+4. Verifica zona horaria en `.env` y `config/app.php` (`APP_TIMEZONE` / `timezone`) para que el horario esperado coincida con cPanel.
+
+### 7.3.1 Validar específicamente la tarea BCV
+
+En este proyecto la tarea BCV está definida así:
+
+- Comando: `bcv:rates:sync`
+- Cron: `BCV_SYNC_CRON` desde `.env`, con fallback `0 5 * * *` (05:00 diario) si no está definido.
+
+Si al ejecutar manualmente `php artisan bcv:rates:sync` funciona, el problema no es el comando sino el cron del sistema.
+Para confirmar que scheduler lo tiene registrado:
+
+```bash
+cd /home/USUARIO/RUTA_DEL_PROYECTO
+/usr/local/bin/php artisan schedule:list | grep bcv:rates:sync
+```
+
+Y para forzar una prueba del scheduler (sin esperar a las 05:00), coloca temporalmente en `.env`:
+
+```dotenv
+BCV_SYNC_CRON=* * * * *
+```
+
+Luego:
+
+```bash
+cd /home/USUARIO/RUTA_DEL_PROYECTO
+/usr/local/bin/php artisan config:clear
+/usr/local/bin/php artisan schedule:run -v
+```
+
+Después de validar, vuelve `BCV_SYNC_CRON` a su valor normal (por ejemplo `0 5 * * *`).
+
+### 7.4 Comando alterno para Laravel 12 (worker continuo)
+
+Si tienes acceso SSH persistente (no siempre disponible en shared hosting), puedes usar:
+
+```bash
+/usr/local/bin/php artisan schedule:work
+```
+
+En cPanel compartido normalmente se mantiene `schedule:run` vía Cron cada minuto, porque es el patrón más compatible.
+
 
 ## 6) ¿Qué significa `AggregateError [ETIMEDOUT] (control socket)`?
 
