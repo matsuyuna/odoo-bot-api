@@ -124,6 +124,25 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('1.name', 'Acetaminofen Infantil');
     }
 
+    public function test_buscar_objcompleto_prioriza_coincidencia_mas_cercana_por_similitud(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->emptyNameSearchXml(), 200)
+                ->push($this->nameSearchTirzepatideXml(), 200)
+                ->push($this->productReadTirzepatidaXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=tirzepatide');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonPath('0.name', 'Tirzepatida 5mg')
+            ->assertJsonPath('1.name', 'Triprolidina Jarabe');
+    }
+
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
     {
         Http::fake([
@@ -210,6 +229,60 @@ XML;
 XML;
     }
 
+    private function nameSearchTirzepatideXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <array>
+                <data>
+                  <value><int>700</int></value>
+                  <value><string>Triprolidina Jarabe</string></value>
+                </data>
+              </array>
+            </value>
+            <value>
+              <array>
+                <data>
+                  <value><int>701</int></value>
+                  <value><string>Tirzepatida 5mg</string></value>
+                </data>
+              </array>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function emptyNameSearchXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
     private function productReadXml(): string
     {
         return <<<'XML'
@@ -238,6 +311,45 @@ XML;
                 <member><name>qty_available</name><value><double>4</double></value></member>
                 <member><name>lst_price</name><value><double>12.4</double></value></member>
                 <member><name>barcode</name><value><string>67890</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productReadTirzepatidaXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>700</int></value></member>
+                <member><name>name</name><value><string>Triprolidina Jarabe</string></value></member>
+                <member><name>default_code</name><value><string>TRP500</string></value></member>
+                <member><name>qty_available</name><value><double>5</double></value></member>
+                <member><name>lst_price</name><value><double>10.0</double></value></member>
+                <member><name>barcode</name><value><string>33333</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>701</int></value></member>
+                <member><name>name</name><value><string>Tirzepatida 5mg</string></value></member>
+                <member><name>default_code</name><value><string>TIR5</string></value></member>
+                <member><name>qty_available</name><value><double>3</double></value></member>
+                <member><name>lst_price</name><value><double>50.0</double></value></member>
+                <member><name>barcode</name><value><string>44444</string></value></member>
               </struct>
             </value>
           </data>
