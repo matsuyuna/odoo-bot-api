@@ -140,7 +140,7 @@ class BotProductoController extends Controller
             )));
 
             $availabilityText = empty($availabilityTexts)
-                ? ''
+                ? 'No encontramos ningún producto bajo esa descripción'
                 : implode("\n\n", array_map(
                     fn (string $text) => '- ' . $text,
                     $availabilityTexts

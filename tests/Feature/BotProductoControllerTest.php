@@ -178,6 +178,24 @@ class BotProductoControllerTest extends TestCase
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'updateContactAttributes'));
     }
 
+    public function test_buscar_producto_devuelve_mensaje_cuando_no_hay_resultados(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->emptyNameSearchXml(), 200)
+                ->push($this->emptyNameSearchXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto?nombre=zzzz');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('availability_text', 'No encontramos ningún producto bajo esa descripción');
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'updateContactAttributes'));
+    }
+
     public function test_buscar_producto_suma_stock_solo_en_depositos_configurados(): void
     {
         putenv('ODOO_STORE_LOCATION_IDS=11,12');
