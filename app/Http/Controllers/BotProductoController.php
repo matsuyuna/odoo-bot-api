@@ -54,13 +54,13 @@ class BotProductoController extends Controller
                     'availability_text_res_currency_rate' => sprintf(
                         '%s - %s - Precio %s',
                         $producto['name'] ?? 'Producto sin nombre',
-                        $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
+                        $qtyAvailable > 0 ? 'Sí hay disponible' : 'No hay disponible',
                         $precioResCurrencyRateTexto,
                     ),
                     'availability_text_res_currency' => sprintf(
                         '%s - %s - Precio %s',
                         $producto['name'] ?? 'Producto sin nombre',
-                        $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
+                        $qtyAvailable > 0 ? 'Sí hay disponible' : 'No hay disponible',
                         $precioResCurrencyTexto,
                     ),
                 ];
@@ -120,13 +120,13 @@ class BotProductoController extends Controller
                     'availability_text_res_currency_rate' => sprintf(
                         '%s - %s - Precio %s',
                         $producto['name'] ?? 'Producto sin nombre',
-                        $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
+                        $qtyAvailable > 0 ? 'Sí hay disponible' : 'No hay disponible',
                         $precioResCurrencyRateTexto,
                     ),
                     'availability_text_res_currency' => sprintf(
                         '%s - %s - Precio %s',
                         $producto['name'] ?? 'Producto sin nombre',
-                        $qtyAvailable > 0 ? 'Si hay disponible' : 'No hay disponible',
+                        $qtyAvailable > 0 ? 'Sí hay disponible' : 'No hay disponible',
                         $precioResCurrencyTexto,
                     ),
                 ];
