@@ -163,7 +163,7 @@ class OdooXmlRpc
             foreach ($this->expandPrefixFallbackTerms($term) as $prefix) {
                 $rows = $this->searchRead(
                     'product.product',
-                    ['|', ['name', 'ilike', $prefix], ['default_code', 'ilike', $prefix]],
+                    ['&', ['active', '=', true], '|', ['name', 'ilike', $prefix], ['default_code', 'ilike', $prefix]],
                     ['id', 'name'],
                     $limit
                 );
@@ -1243,6 +1243,11 @@ class OdooXmlRpc
     private function nameSearch(string $model, string $term, int $limit = 40): array
     {
         $uid = $this->getUid();
+        $args = [];
+
+        if ($model === 'product.product') {
+            $args = [['active', '=', true]];
+        }
 
         $xml = $this->buildMethodCall('execute_kw', [
             $this->db,
@@ -1252,6 +1257,7 @@ class OdooXmlRpc
             'name_search',
             [$term], // term
             [
+                'args' => $args,
                 'operator' => 'ilike',
                 'limit' => $limit,
             ],
