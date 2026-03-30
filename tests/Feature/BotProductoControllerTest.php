@@ -178,8 +178,8 @@ class BotProductoControllerTest extends TestCase
             ->assertOk()
             ->assertJsonCount(3)
             ->assertJsonPath('0.name', 'Vitamina C 1g')
-            ->assertJsonPath('1.name', 'Vitamina D 2000UI')
-            ->assertJsonPath('2.name', 'Vitamina A 5000UI');
+            ->assertJsonPath('1.name', 'Vitamina C con Zinc')
+            ->assertJsonPath('2.name', 'Vitamina D 2000UI');
     }
 
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
@@ -343,7 +343,7 @@ XML;
               <array>
                 <data>
                   <value><int>802</int></value>
-                  <value><string>Vitamina A 5000UI</string></value>
+                  <value><string>Vitamina C con Zinc</string></value>
                 </data>
               </array>
             </value>
@@ -386,7 +386,7 @@ XML;
               <array>
                 <data>
                   <value><int>802</int></value>
-                  <value><string>Vitamina A 5000UI</string></value>
+                  <value><string>Vitamina C con Zinc</string></value>
                 </data>
               </array>
             </value>
@@ -518,7 +518,7 @@ XML;
               <struct>
                 <member><name>id</name><value><int>801</int></value></member>
                 <member><name>name</name><value><string>Vitamina D 2000UI</string></value></member>
-                <member><name>default_code</name><value><string>VITD</string></value></member>
+                <member><name>default_code</name><value><string>BIOTINA VITAMINA C Y A</string></value></member>
                 <member><name>qty_available</name><value><double>4</double></value></member>
                 <member><name>lst_price</name><value><double>14.0</double></value></member>
                 <member><name>barcode</name><value><string>11111</string></value></member>
@@ -527,8 +527,8 @@ XML;
             <value>
               <struct>
                 <member><name>id</name><value><int>802</int></value></member>
-                <member><name>name</name><value><string>Vitamina A 5000UI</string></value></member>
-                <member><name>default_code</name><value><string>VITA</string></value></member>
+                <member><name>name</name><value><string>Vitamina C con Zinc</string></value></member>
+                <member><name>default_code</name><value><string>VITCZ</string></value></member>
                 <member><name>qty_available</name><value><double>4</double></value></member>
                 <member><name>lst_price</name><value><double>13.0</double></value></member>
                 <member><name>barcode</name><value><string>22222</string></value></member>
