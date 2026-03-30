@@ -87,7 +87,7 @@ class OdooXmlRpc
             $idsFinal = array_values(array_filter(array_map(fn($p) => $p[0] ?? null, $pairs), fn($x) => is_int($x)));
         }
 
-        $idsFinal = array_slice($idsFinal, 0, $limit);
+        $idsFinal = array_slice($idsFinal, 0, max($limit * 4, $limit));
 
         if (!$idsFinal) return [];
 
@@ -104,20 +104,25 @@ class OdooXmlRpc
             $qtyByProductId = $this->readQtyAvailableByLocations($idsFinal, $storeLocationIds);
         }
 
-        // Normaliza salida
+        // Normaliza salida y excluye productos sin disponibilidad.
         $out = [];
         foreach ($rows as $r) {
+            $qtyAvailable = (float) ($qtyByProductId[$r['id'] ?? 0] ?? ($r['qty_available'] ?? 0));
+            if ($qtyAvailable <= 0) {
+                continue;
+            }
+
             $out[] = [
                 'id' => $r['id'] ?? null,
                 'name' => $r['name'] ?? null,
                 'default_code' => $r['default_code'] ?? null,
                 'barcode' => $r['barcode'] ?? null,
-                'qty_available' => $qtyByProductId[$r['id'] ?? 0] ?? ($r['qty_available'] ?? 0),
+                'qty_available' => $qtyAvailable,
                 'price' => $r['lst_price'] ?? 0,
             ];
         }
 
-        return $out;
+        return array_slice($out, 0, $limit);
     }
 
     /**
