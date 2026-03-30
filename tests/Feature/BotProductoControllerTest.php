@@ -162,6 +162,26 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('0.name', 'Tirzepatida 5mg');
     }
 
+    public function test_buscar_objcompleto_prioriza_palabra_especifica_de_la_query(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->nameSearchVitaminaXml(), 200)
+                ->push($this->nameSearchVitaminaCXml(), 200)
+                ->push($this->productReadVitaminasXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=vitamina c');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(3)
+            ->assertJsonPath('0.name', 'Vitamina C 1g')
+            ->assertJsonPath('1.name', 'Vitamina C con Zinc')
+            ->assertJsonPath('2.name', 'Vitamina D 2000UI');
+    }
+
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
     {
         Http::fake([
@@ -301,6 +321,92 @@ XML;
 XML;
     }
 
+    private function nameSearchVitaminaXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <array>
+                <data>
+                  <value><int>801</int></value>
+                  <value><string>Vitamina D 2000UI</string></value>
+                </data>
+              </array>
+            </value>
+            <value>
+              <array>
+                <data>
+                  <value><int>802</int></value>
+                  <value><string>Vitamina C con Zinc</string></value>
+                </data>
+              </array>
+            </value>
+            <value>
+              <array>
+                <data>
+                  <value><int>803</int></value>
+                  <value><string>Vitamina C 1g</string></value>
+                </data>
+              </array>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function nameSearchVitaminaCXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <array>
+                <data>
+                  <value><int>803</int></value>
+                  <value><string>Vitamina C 1g</string></value>
+                </data>
+              </array>
+            </value>
+            <value>
+              <array>
+                <data>
+                  <value><int>802</int></value>
+                  <value><string>Vitamina C con Zinc</string></value>
+                </data>
+              </array>
+            </value>
+            <value>
+              <array>
+                <data>
+                  <value><int>801</int></value>
+                  <value><string>Vitamina D 2000UI</string></value>
+                </data>
+              </array>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
     private function emptyNameSearchXml(): string
     {
         return <<<'XML'
@@ -387,6 +493,55 @@ XML;
                 <member><name>qty_available</name><value><double>3</double></value></member>
                 <member><name>lst_price</name><value><double>50.0</double></value></member>
                 <member><name>barcode</name><value><string>44444</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productReadVitaminasXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>801</int></value></member>
+                <member><name>name</name><value><string>Vitamina D 2000UI</string></value></member>
+                <member><name>default_code</name><value><string>BIOTINA VITAMINA C Y A</string></value></member>
+                <member><name>qty_available</name><value><double>4</double></value></member>
+                <member><name>lst_price</name><value><double>14.0</double></value></member>
+                <member><name>barcode</name><value><string>11111</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>802</int></value></member>
+                <member><name>name</name><value><string>Vitamina C con Zinc</string></value></member>
+                <member><name>default_code</name><value><string>VITCZ</string></value></member>
+                <member><name>qty_available</name><value><double>4</double></value></member>
+                <member><name>lst_price</name><value><double>13.0</double></value></member>
+                <member><name>barcode</name><value><string>22222</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>803</int></value></member>
+                <member><name>name</name><value><string>Vitamina C 1g</string></value></member>
+                <member><name>default_code</name><value><string>VITC</string></value></member>
+                <member><name>qty_available</name><value><double>4</double></value></member>
+                <member><name>lst_price</name><value><double>15.0</double></value></member>
+                <member><name>barcode</name><value><string>33333</string></value></member>
               </struct>
             </value>
           </data>

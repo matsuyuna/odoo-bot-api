@@ -312,8 +312,8 @@ class OdooXmlRpc
             return 0.0;
         }
 
-        $containsBonus = str_contains($haystack, $normalizedQuery) ? 1.0 : 0.0;
-        $startsBonus = str_starts_with($haystack, $normalizedQuery) ? 1.0 : 0.0;
+        $containsBonus = str_contains($name, $normalizedQuery) ? 1.0 : 0.0;
+        $startsBonus = str_starts_with($name, $normalizedQuery) ? 1.0 : 0.0;
 
         $maxLen = max(mb_strlen($normalizedQuery), mb_strlen($haystack));
         $levScore = 0.0;
@@ -322,35 +322,125 @@ class OdooXmlRpc
             $levScore = max(0.0, 1 - ($levDistance / $maxLen));
         }
 
-        $tokenScores = [];
-        foreach ($queryTokens as $queryToken) {
+        $tokenCount = count($queryTokens);
+        $weightedTokenScore = 0.0;
+        $totalTokenWeight = 0.0;
+        $tokensMatchedInName = 0;
+        $tokensMatchedOnlyInCode = 0;
+        foreach ($queryTokens as $idx => $queryToken) {
             $queryToken = trim($queryToken);
             if ($queryToken === '') {
                 continue;
             }
 
-            $similarity = 0.0;
-            similar_text($queryToken, $haystack, $similarityPercent);
-            $similarity = max($similarity, $similarityPercent / 100);
-
-            if (str_contains($haystack, $queryToken)) {
-                $similarity = max($similarity, 1.0);
+            $matchesName = $this->tokenMatches($queryToken, $name);
+            $matchesCode = $this->tokenMatches($queryToken, $code);
+            if ($matchesName) {
+                $tokensMatchedInName++;
+            } elseif ($matchesCode) {
+                $tokensMatchedOnlyInCode++;
             }
 
-            $tokenScores[] = $similarity;
+            $weight = 1.0 + ($idx * 0.75);
+            $tokenScore = $this->tokenRelevanceScore($queryToken, $name, $code, $haystack, $tokenCount > 1);
+            $weightedTokenScore += ($tokenScore * $weight);
+            $totalTokenWeight += $weight;
         }
 
-        $tokenAverage = empty($tokenScores)
+        $tokenAverage = $totalTokenWeight <= 0
             ? 0.0
-            : (array_sum($tokenScores) / count($tokenScores));
+            : ($weightedTokenScore / $totalTokenWeight);
+
+        $coverageInName = $tokenCount > 0 ? ($tokensMatchedInName / $tokenCount) : 0.0;
+        $codeOnlyRatio = $tokenCount > 0 ? ($tokensMatchedOnlyInCode / $tokenCount) : 0.0;
+        $compactnessBonus = $this->compactnessBonus($name, $queryTokens);
+        $codePenalty = $codeOnlyRatio * 0.25;
 
         // Pesos para priorizar coincidencia real, pero permitiendo typo/cambios mínimos.
         $score = ($tokenAverage * 0.60)
             + ($levScore * 0.25)
             + ($containsBonus * 0.10)
-            + ($startsBonus * 0.05);
+            + ($startsBonus * 0.05)
+            + ($coverageInName * 0.15)
+            + ($compactnessBonus * 0.05)
+            - $codePenalty;
 
         return round($score, 6);
+    }
+
+    private function tokenRelevanceScore(string $token, string $name, string $code, string $haystack, bool $isMultiTokenQuery): float
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return 0.0;
+        }
+
+        $escapedToken = preg_quote($token, '/');
+        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $name) === 1) {
+            return 1.0;
+        }
+
+        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $code) === 1) {
+            return $isMultiTokenQuery ? 0.55 : 0.85;
+        }
+
+        if (str_contains($name, $token)) {
+            return 0.8;
+        }
+
+        if (str_contains($code, $token)) {
+            return $isMultiTokenQuery ? 0.4 : 0.65;
+        }
+
+        if (str_contains($haystack, $token)) {
+            return 0.35;
+        }
+
+        similar_text($token, $haystack, $similarityPercent);
+
+        return ($similarityPercent / 100) * 0.5;
+    }
+
+    private function tokenMatches(string $token, string $value): bool
+    {
+        $token = trim($token);
+        $value = trim($value);
+
+        if ($token === '' || $value === '') {
+            return false;
+        }
+
+        $escapedToken = preg_quote($token, '/');
+        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $value) === 1) {
+            return true;
+        }
+
+        return str_contains($value, $token);
+    }
+
+    /**
+     * Retorna mayor puntaje cuando el nombre contiene la frase buscada con pocos
+     * términos extra (ej: "vitamina c" > "vitamina c con zinc").
+     *
+     * @param string[] $queryTokens
+     */
+    private function compactnessBonus(string $name, array $queryTokens): float
+    {
+        $queryTokens = array_values(array_filter(array_map('trim', $queryTokens), fn (string $t): bool => $t !== ''));
+        if (empty($queryTokens) || $name === '') {
+            return 0.0;
+        }
+
+        $queryPhrase = implode(' ', $queryTokens);
+        if (!str_contains($name, $queryPhrase)) {
+            return 0.0;
+        }
+
+        $nameWordCount = count(array_values(array_filter(explode(' ', $name), fn (string $t): bool => $t !== '')));
+        $queryWordCount = count($queryTokens);
+        $extraWords = max(0, $nameWordCount - $queryWordCount);
+
+        return 1 / (1 + $extraWords);
     }
 
     private function normalizeSearchText(string $value): string
