@@ -312,8 +312,8 @@ class OdooXmlRpc
             return 0.0;
         }
 
-        $containsBonus = str_contains($haystack, $normalizedQuery) ? 1.0 : 0.0;
-        $startsBonus = str_starts_with($haystack, $normalizedQuery) ? 1.0 : 0.0;
+        $containsBonus = str_contains($name, $normalizedQuery) ? 1.0 : 0.0;
+        $startsBonus = str_starts_with($name, $normalizedQuery) ? 1.0 : 0.0;
 
         $maxLen = max(mb_strlen($normalizedQuery), mb_strlen($haystack));
         $levScore = 0.0;
@@ -322,27 +322,23 @@ class OdooXmlRpc
             $levScore = max(0.0, 1 - ($levDistance / $maxLen));
         }
 
-        $tokenScores = [];
-        foreach ($queryTokens as $queryToken) {
+        $weightedTokenScore = 0.0;
+        $totalTokenWeight = 0.0;
+        foreach ($queryTokens as $idx => $queryToken) {
             $queryToken = trim($queryToken);
             if ($queryToken === '') {
                 continue;
             }
 
-            $similarity = 0.0;
-            similar_text($queryToken, $haystack, $similarityPercent);
-            $similarity = max($similarity, $similarityPercent / 100);
-
-            if (str_contains($haystack, $queryToken)) {
-                $similarity = max($similarity, 1.0);
-            }
-
-            $tokenScores[] = $similarity;
+            $weight = 1.0 + ($idx * 0.75);
+            $tokenScore = $this->tokenRelevanceScore($queryToken, $name, $code, $haystack);
+            $weightedTokenScore += ($tokenScore * $weight);
+            $totalTokenWeight += $weight;
         }
 
-        $tokenAverage = empty($tokenScores)
+        $tokenAverage = $totalTokenWeight <= 0
             ? 0.0
-            : (array_sum($tokenScores) / count($tokenScores));
+            : ($weightedTokenScore / $totalTokenWeight);
 
         // Pesos para priorizar coincidencia real, pero permitiendo typo/cambios mínimos.
         $score = ($tokenAverage * 0.60)
@@ -351,6 +347,35 @@ class OdooXmlRpc
             + ($startsBonus * 0.05);
 
         return round($score, 6);
+    }
+
+    private function tokenRelevanceScore(string $token, string $name, string $code, string $haystack): float
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return 0.0;
+        }
+
+        $escapedToken = preg_quote($token, '/');
+        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $name) === 1) {
+            return 1.0;
+        }
+
+        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $code) === 1) {
+            return 0.95;
+        }
+
+        if (str_contains($name, $token)) {
+            return 0.8;
+        }
+
+        if (str_contains($haystack, $token)) {
+            return 0.7;
+        }
+
+        similar_text($token, $haystack, $similarityPercent);
+
+        return ($similarityPercent / 100) * 0.5;
     }
 
     private function normalizeSearchText(string $value): string
