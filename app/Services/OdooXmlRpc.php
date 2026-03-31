@@ -354,6 +354,7 @@ class OdooXmlRpc
         $coverageInName = $tokenCount > 0 ? ($tokensMatchedInName / $tokenCount) : 0.0;
         $codeOnlyRatio = $tokenCount > 0 ? ($tokensMatchedOnlyInCode / $tokenCount) : 0.0;
         $compactnessBonus = $this->compactnessBonus($name, $queryTokens);
+        $defaultCodePriority = $this->defaultCodePriorityScore($code, $normalizedQuery, $queryTokens);
         $codePenalty = $codeOnlyRatio * 0.25;
 
         // Pesos para priorizar coincidencia real, pero permitiendo typo/cambios mínimos.
@@ -363,9 +364,50 @@ class OdooXmlRpc
             + ($startsBonus * 0.05)
             + ($coverageInName * 0.15)
             + ($compactnessBonus * 0.05)
+            + ($defaultCodePriority * 0.35)
             - $codePenalty;
 
         return round($score, 6);
+    }
+
+    /**
+     * Prioriza productos cuyo default_code coincide con la frase buscada
+     * (ej: query "vitamina c" => "VITAMINA C" primero y luego compuestos).
+     *
+     * @param string[] $queryTokens
+     */
+    private function defaultCodePriorityScore(string $normalizedCode, string $normalizedQuery, array $queryTokens): float
+    {
+        if ($normalizedCode === '' || $normalizedQuery === '') {
+            return 0.0;
+        }
+
+        if ($normalizedCode === $normalizedQuery) {
+            return 1.0;
+        }
+
+        $escapedQuery = preg_quote($normalizedQuery, '/');
+        if (preg_match('/(?:^|\s)' . $escapedQuery . '(?:\s|$)/u', $normalizedCode) === 1) {
+            return 0.9;
+        }
+
+        if (str_starts_with($normalizedCode, $normalizedQuery)) {
+            return 0.75;
+        }
+
+        $tokens = array_values(array_filter(array_map('trim', $queryTokens), fn (string $t): bool => $t !== ''));
+        if (empty($tokens)) {
+            return 0.0;
+        }
+
+        $matches = 0;
+        foreach ($tokens as $token) {
+            if ($this->tokenMatches($token, $normalizedCode)) {
+                $matches++;
+            }
+        }
+
+        return $matches / count($tokens);
     }
 
     private function tokenRelevanceScore(string $token, string $name, string $code, string $haystack, bool $isMultiTokenQuery): float
