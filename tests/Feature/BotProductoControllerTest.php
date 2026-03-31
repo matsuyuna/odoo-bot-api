@@ -176,10 +176,11 @@ class BotProductoControllerTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertJsonCount(3)
-            ->assertJsonPath('0.name', 'Vitamina C 1g')
-            ->assertJsonPath('1.name', 'Vitamina C con Zinc')
-            ->assertJsonPath('2.name', 'Vitamina D 2000UI');
+            ->assertJsonCount(4)
+            ->assertJsonPath('0.default_code', 'VITAMINA C')
+            ->assertJsonPath('1.name', 'Vitamina C 1g')
+            ->assertJsonPath('2.name', 'Vitamina C con Zinc')
+            ->assertJsonPath('3.name', 'Vitamina D 2000UI');
     }
 
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
@@ -532,6 +533,16 @@ XML;
                 <member><name>qty_available</name><value><double>4</double></value></member>
                 <member><name>lst_price</name><value><double>13.0</double></value></member>
                 <member><name>barcode</name><value><string>22222</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>804</int></value></member>
+                <member><name>name</name><value><string>Emergen C 1000mg</string></value></member>
+                <member><name>default_code</name><value><string>VITAMINA C</string></value></member>
+                <member><name>qty_available</name><value><double>4</double></value></member>
+                <member><name>lst_price</name><value><double>15.5</double></value></member>
+                <member><name>barcode</name><value><string>44444</string></value></member>
               </struct>
             </value>
             <value>
