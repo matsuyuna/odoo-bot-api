@@ -7,6 +7,7 @@ use App\Services\OdooXmlRpc;
 use App\Services\WatiApi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 class BotProductoController extends Controller
@@ -178,6 +179,21 @@ class BotProductoController extends Controller
                 'res_currency' => null,
             ];
         }
+    }
+
+    private function filterOutCopyProducts(array $productos): array
+    {
+        return array_values(array_filter(
+            $productos,
+            fn (array $producto) => ! $this->isCopyProductName((string) ($producto['name'] ?? ''))
+        ));
+    }
+
+    private function isCopyProductName(string $name): bool
+    {
+        $normalizedName = preg_replace('/\s+/u', '', Str::lower(trim($name))) ?? '';
+
+        return str_contains($normalizedName, '(copiar)');
     }
 
     public function inspeccionar(Request $request)
