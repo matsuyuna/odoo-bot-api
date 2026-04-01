@@ -22,8 +22,7 @@ class BotProductoController extends Controller
 
         try {
             $odoo = OdooXmlRpc::fromEnv();
-            $productos = $odoo->searchProductsSmart($nombre, 7);
-            $productos = $this->filterOutCopyProducts($productos);
+            $productos = $odoo->searchProductsSmart($nombre, 10);
             $latestRates = $this->getLatestBcvRates();
 
             $respuesta = array_map(function (array $producto) use ($latestRates) {
@@ -66,7 +65,7 @@ class BotProductoController extends Controller
                         $precioResCurrencyTexto,
                     ),
                 ];
-            }, array_slice($productos, 0, 7));
+            }, array_slice($productos, 0, 10));
 
             $this->actualizarProductosEnWati($request, $respuesta);
 
@@ -89,8 +88,7 @@ class BotProductoController extends Controller
 
         try {
             $odoo = OdooXmlRpc::fromEnv();
-            $productos = $odoo->searchProductsSmart($nombre, 7);
-            $productos = $this->filterOutCopyProducts($productos);
+            $productos = $odoo->searchProductsSmart($nombre, 10);
             $latestRates = $this->getLatestBcvRates();
 
             $respuesta = array_map(function (array $producto) use ($latestRates) {
@@ -133,7 +131,7 @@ class BotProductoController extends Controller
                         $precioResCurrencyTexto,
                     ),
                 ];
-            }, array_slice($productos, 0, 7));
+            }, array_slice($productos, 0, 10));
 
             $this->actualizarProductosEnWati($request, $respuesta);
 
