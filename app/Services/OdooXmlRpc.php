@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class OdooXmlRpc
@@ -63,17 +64,32 @@ class OdooXmlRpc
     public function searchProductsSmart(string $query, int $limit = 20): array
     {
         $tokens = $this->tokenizeQuery($query);
+        $searchTokens = array_values(array_filter($tokens, fn (string $t): bool => mb_strlen($t) > 1));
 
         if (!$tokens) {
             return [];
         }
 
+        $phraseFirstIds = count($tokens) > 1
+            ? $this->searchProductsByFullPhrase($query, $limit * 3)
+            : [];
+
+        $idsByToken = [];
         $idSets = [];
-        foreach ($tokens as $t) {
+        foreach ($searchTokens as $t) {
             $pairs = $this->nameSearchByTermVariants('product.product', $t, $limit * 3);
             $ids = array_values(array_filter(array_map(fn($p) => $p[0] ?? null, $pairs), fn($x) => is_int($x)));
+            $idsByToken[$t] = $ids;
             $idSets[] = $ids;
         }
+
+        Log::debug('searchProductsSmart.debug_tokens_and_ids', [
+            'query' => $query,
+            'tokens' => $tokens,
+            'search_tokens' => $searchTokens,
+            'phrase_ids' => $phraseFirstIds,
+            'ids_by_token' => $idsByToken,
+        ]);
 
         // AND: ids comunes a todos los tokens
         $idsFinal = $idSets[0] ?? [];
@@ -82,9 +98,23 @@ class OdooXmlRpc
         }
 
         // Si no hubo intersección, fallback: usa solo el primer token (mejor UX)
-        if (!$idsFinal) {
-            $pairs = $this->nameSearchByTermVariants('product.product', $tokens[0], $limit * 2);
+        if (!$idsFinal && !empty($searchTokens)) {
+            $pairs = $this->nameSearchByTermVariants('product.product', $searchTokens[0], $limit * 2);
             $idsFinal = array_values(array_filter(array_map(fn($p) => $p[0] ?? null, $pairs), fn($x) => is_int($x)));
+        }
+
+        if (!empty($phraseFirstIds)) {
+            $mergedIds = [];
+            $seenIds = [];
+            foreach (array_merge($phraseFirstIds, $idsFinal) as $id) {
+                if (!is_int($id) || isset($seenIds[$id])) {
+                    continue;
+                }
+
+                $seenIds[$id] = true;
+                $mergedIds[] = $id;
+            }
+            $idsFinal = $mergedIds;
         }
 
         $idsFinal = array_slice($idsFinal, 0, max($limit * 4, $limit));
@@ -96,6 +126,21 @@ class OdooXmlRpc
             'id', 'name', 'default_code', 'qty_available', 'barcode', 'lst_price'
         ]);
         $rows = $this->sortProductsByRelevance($rows, $query);
+
+        $normalizedQuery = $this->normalizeSearchText($query);
+        $scoreTokens = $this->tokenizeQuery($normalizedQuery);
+        $topScores = [];
+        foreach (array_slice($rows, 0, 5) as $row) {
+            $topScores[] = [
+                'id' => $row['id'] ?? null,
+                'name' => $row['name'] ?? null,
+                'score' => $this->productRelevanceScore($row, $normalizedQuery, $scoreTokens),
+            ];
+        }
+        Log::debug('searchProductsSmart.debug_top_scores', [
+            'query' => $query,
+            'top_scores' => $topScores,
+        ]);
 
         $qtyByProductId = [];
         $storeLocationIds = $this->getStoreLocationIds();
@@ -127,6 +172,45 @@ class OdooXmlRpc
         }
 
         return array_slice($out, 0, $limit);
+    }
+
+    /**
+     * Busca por frase completa en name/default_code antes del flujo por tokens.
+     *
+     * @return int[]
+     */
+    private function searchProductsByFullPhrase(string $query, int $limit): array
+    {
+        $normalizedQuery = $this->normalizeSearchText($query);
+        if ($normalizedQuery === '') {
+            return [];
+        }
+
+        $rows = $this->searchRead(
+            'product.product',
+            ['&', ['active', '=', true], '|', ['name', 'ilike', $normalizedQuery], ['default_code', 'ilike', $normalizedQuery]],
+            ['id', 'name', 'default_code'],
+            max(1, $limit)
+        );
+        $rows = $this->sortProductsByRelevance($rows, $normalizedQuery);
+
+        $ids = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $id = $row['id'] ?? null;
+            if (!is_int($id) || isset($seen[$id])) {
+                continue;
+            }
+
+            $seen[$id] = true;
+            $ids[] = $id;
+
+            if (count($ids) >= $limit) {
+                break;
+            }
+        }
+
+        return $ids;
     }
 
     private function isCopyProductName(string $name): bool
@@ -323,8 +407,10 @@ class OdooXmlRpc
             return 0.0;
         }
 
-        $containsBonus = str_contains($name, $normalizedQuery) ? 1.0 : 0.0;
-        $startsBonus = str_starts_with($name, $normalizedQuery) ? 1.0 : 0.0;
+        $nameExactBonus = $name !== '' && $name === $normalizedQuery ? 1.0 : 0.0;
+        $defaultCodeExactBonus = $code !== '' && $code === $normalizedQuery ? 1.0 : 0.0;
+        $phraseContainsInNameBonus = str_contains($name, $normalizedQuery) ? 1.0 : 0.0;
+        $phraseStartsInNameBonus = str_starts_with($name, $normalizedQuery) ? 1.0 : 0.0;
 
         $maxLen = max(mb_strlen($normalizedQuery), mb_strlen($haystack));
         $levScore = 0.0;
@@ -371,8 +457,10 @@ class OdooXmlRpc
         // Pesos para priorizar coincidencia real, pero permitiendo typo/cambios mínimos.
         $score = ($tokenAverage * 0.60)
             + ($levScore * 0.25)
-            + ($containsBonus * 0.10)
-            + ($startsBonus * 0.05)
+            + ($nameExactBonus * 1.70)
+            + ($defaultCodeExactBonus * 1.60)
+            + ($phraseContainsInNameBonus * 0.85)
+            + ($phraseStartsInNameBonus * 1.15)
             + ($coverageInName * 0.15)
             + ($compactnessBonus * 0.05)
             + ($defaultCodePriority * 0.35)
@@ -428,12 +516,22 @@ class OdooXmlRpc
             return 0.0;
         }
 
-        $escapedToken = preg_quote($token, '/');
-        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $name) === 1) {
+        if (mb_strlen($token) === 1) {
+            if ($this->hasDelimitedTokenMatch($token, $name)) {
+                return 1.0;
+            }
+            if ($this->hasDelimitedTokenMatch($token, $code)) {
+                return $isMultiTokenQuery ? 0.55 : 0.85;
+            }
+
+            return 0.0;
+        }
+
+        if ($this->hasDelimitedTokenMatch($token, $name)) {
             return 1.0;
         }
 
-        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $code) === 1) {
+        if ($this->hasDelimitedTokenMatch($token, $code)) {
             return $isMultiTokenQuery ? 0.55 : 0.85;
         }
 
@@ -463,12 +561,22 @@ class OdooXmlRpc
             return false;
         }
 
-        $escapedToken = preg_quote($token, '/');
-        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $value) === 1) {
+        if ($this->hasDelimitedTokenMatch($token, $value)) {
             return true;
         }
 
+        if (mb_strlen($token) === 1) {
+            return false;
+        }
+
         return str_contains($value, $token);
+    }
+
+    private function hasDelimitedTokenMatch(string $token, string $value): bool
+    {
+        $escapedToken = preg_quote($token, '/');
+
+        return preg_match('/(?:^|[^\p{L}\p{N}])' . $escapedToken . '(?:$|[^\p{L}\p{N}])/u', $value) === 1;
     }
 
     /**
@@ -1620,41 +1728,79 @@ class OdooXmlRpc
     /** Tokeniza como buscador: quita stopwords y separa */
     private function tokenizeQuery(string $q): array
     {
-        $q = mb_strtolower(trim($q));
+        $q = $this->normalizeSearchText($q);
 
         // quita palabras “ruido” comunes
         $stopWords = ['de', 'del', 'la', 'el', 'los', 'las', 'para', 'x', 'por'];
-        $q = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $q); // deja letras/números/espacios
-        $q = preg_replace('/\s+/', ' ', $q);
         $parts = array_values(array_filter(explode(' ', $q)));
 
         $tokens = [];
         foreach ($parts as $p) {
-            if (in_array($p, $stopWords, true)) continue;
-            if (mb_strlen($p) < 2) continue;
+            if (in_array($p, $stopWords, true)) {
+                continue;
+            }
+
+            if (mb_strlen($p) === 1 && !$this->isRelevantSingleCharToken($p)) {
+                continue;
+            }
+
+            if (mb_strlen($p) < 1) {
+                continue;
+            }
+
             $tokens[] = $p;
         }
 
-        // si el usuario escribió "500mg" también ayuda a separar número/letra (opcional)
-        // ejemplo: "500mg" -> "500" y "mg"
         $expanded = [];
         foreach ($tokens as $t) {
+            $expanded[] = $t;
+
             if (preg_match('/^\d+[a-z]+$/i', $t)) {
-                $expanded[] = preg_replace('/[a-z]+$/i', '', $t);
-                $expanded[] = preg_replace('/^\d+/i', '', $t);
-            } else {
-                $expanded[] = $t;
+                $numberPart = preg_replace('/[a-z]+$/i', '', $t);
+                $letterPart = preg_replace('/^\d+/i', '', $t);
+                if ($numberPart !== null && $numberPart !== '') {
+                    $expanded[] = $numberPart;
+                }
+                if ($letterPart !== null && $letterPart !== '') {
+                    $expanded[] = $letterPart;
+                }
+                continue;
+            }
+
+            if (preg_match('/^[a-z]+\d+$/i', $t)) {
+                $letterPart = preg_replace('/\d+$/i', '', $t);
+                $numberPart = preg_replace('/^[a-z]+/i', '', $t);
+                if ($letterPart !== null && $letterPart !== '') {
+                    $expanded[] = $letterPart;
+                }
+                if ($numberPart !== null && $numberPart !== '') {
+                    $expanded[] = $numberPart;
+                }
             }
         }
 
         // únicos manteniendo orden
         $unique = [];
         foreach ($expanded as $t) {
-            if ($t === '') continue;
+            if ($t === '') {
+                continue;
+            }
+
+            if (mb_strlen($t) === 1 && !$this->isRelevantSingleCharToken($t)) {
+                continue;
+            }
+
             if (!in_array($t, $unique, true)) $unique[] = $t;
         }
 
         return $unique;
+    }
+
+    private function isRelevantSingleCharToken(string $token): bool
+    {
+        static $allowedSingleCharTokens = ['a', 'b', 'c', 'd', 'e', 'k'];
+
+        return in_array($token, $allowedSingleCharTokens, true);
     }
 
     private function postXml(string $url, string $xml): string

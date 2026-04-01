@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\BcvRate;
+use App\Services\OdooXmlRpc;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use ReflectionMethod;
 use Tests\TestCase;
 
 class BotProductoControllerTest extends TestCase
@@ -185,6 +187,7 @@ class BotProductoControllerTest extends TestCase
         Http::fake([
             'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
             'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->searchReadPhraseVitaminaCXml(), 200)
                 ->push($this->nameSearchVitaminaXml(), 200)
                 ->push($this->nameSearchVitaminaCXml(), 200)
                 ->push($this->productReadVitaminasXml(), 200),
@@ -199,6 +202,94 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('1.name', 'Vitamina C 1g')
             ->assertJsonPath('2.name', 'Vitamina C con Zinc')
             ->assertJsonPath('3.name', 'Vitamina D 2000UI');
+    }
+
+    public function test_buscar_objcompleto_no_hace_name_search_para_token_unitario(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->searchReadPhraseVitaminaCXml(), 200)
+                ->push($this->nameSearchVitaminaXml(), 200)
+                ->push($this->productReadVitaminasXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=vitamina c');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('0.default_code', 'VITAMINA C')
+            ->assertJsonPath('1.name', 'Vitamina C 1g');
+    }
+
+    public function test_buscar_objcompleto_prioriza_frase_completa_en_query_compuesta(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->searchReadPhraseAcetaminofen500Xml(), 200)
+                ->push($this->nameSearchXml(), 200) // acetaminofen
+                ->push($this->nameSearch500Xml(), 200) // 500
+                ->push($this->productReadAcetaminofen500Xml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=acetaminofen 500');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(3)
+            ->assertJsonPath('0.name', 'Acetaminofen 500mg')
+            ->assertJsonPath('1.name', 'Acetaminofen 500mg Plus')
+            ->assertJsonPath('2.name', 'Acetaminofen Infantil');
+    }
+
+    public function test_buscar_objcompleto_prioriza_codigo_exacto_500mg_sobre_similares(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->nameSearch500mgXml(), 200)
+                ->push($this->productRead500mgRankingXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=500mg');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(3)
+            ->assertJsonPath('0.default_code', '500MG')
+            ->assertJsonPath('1.default_code', 'ACE500')
+            ->assertJsonPath('2.default_code', 'JBE500');
+    }
+
+    public function test_tokenize_query_conserva_tokens_unitarios_relevantes_y_alfanumericos(): void
+    {
+        $service = OdooXmlRpc::fromEnv();
+        $method = new ReflectionMethod(OdooXmlRpc::class, 'tokenizeQuery');
+        $method->setAccessible(true);
+
+        $vitaminaTokens = $method->invoke($service, 'vitamina c');
+        $this->assertSame(['vitamina', 'c'], $vitaminaTokens);
+
+        $doseTokens = $method->invoke($service, '500mg');
+        $this->assertSame(['500mg', '500', 'mg'], $doseTokens);
+
+        $b12Tokens = $method->invoke($service, 'b12');
+        $this->assertSame(['b12', 'b', '12'], $b12Tokens);
+
+        $d3Tokens = $method->invoke($service, 'd3');
+        $this->assertSame(['d3', 'd', '3'], $d3Tokens);
+    }
+
+    public function test_token_matches_unitario_no_coincide_por_substring_libre(): void
+    {
+        $service = OdooXmlRpc::fromEnv();
+        $method = new ReflectionMethod(OdooXmlRpc::class, 'tokenMatches');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke($service, 'c', 'vitamina c 1g'));
+        $this->assertFalse($method->invoke($service, 'c', 'calcibon vitamina d'));
+        $this->assertFalse($method->invoke($service, 'c', 'calcio vitamina d'));
     }
 
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
@@ -671,6 +762,213 @@ XML;
               <struct>
                 <member><name>id</name><value><int>701</int></value></member>
                 <member><name>name</name><value><string>Tirzepatida 5mg</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function searchReadPhraseVitaminaCXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>804</int></value></member>
+                <member><name>name</name><value><string>Emergen C 1000mg</string></value></member>
+                <member><name>default_code</name><value><string>VITAMINA C</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>803</int></value></member>
+                <member><name>name</name><value><string>Vitamina C 1g</string></value></member>
+                <member><name>default_code</name><value><string>VITC</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function searchReadPhraseAcetaminofen500Xml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>501</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen 500mg</string></value></member>
+                <member><name>default_code</name><value><string>ACE500</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>503</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen 500mg Plus</string></value></member>
+                <member><name>default_code</name><value><string>ACE500P</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function nameSearch500Xml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value><array><data><value><int>501</int></value><value><string>Acetaminofen 500mg</string></value></data></array></value>
+            <value><array><data><value><int>503</int></value><value><string>Acetaminofen 500mg Plus</string></value></data></array></value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productReadAcetaminofen500Xml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>501</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen 500mg</string></value></member>
+                <member><name>default_code</name><value><string>ACE500</string></value></member>
+                <member><name>qty_available</name><value><double>6</double></value></member>
+                <member><name>lst_price</name><value><double>20</double></value></member>
+                <member><name>barcode</name><value><string>11111</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>503</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen 500mg Plus</string></value></member>
+                <member><name>default_code</name><value><string>ACE500P</string></value></member>
+                <member><name>qty_available</name><value><double>5</double></value></member>
+                <member><name>lst_price</name><value><double>21</double></value></member>
+                <member><name>barcode</name><value><string>33331</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>502</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen Infantil</string></value></member>
+                <member><name>default_code</name><value><string>ACEINF</string></value></member>
+                <member><name>qty_available</name><value><double>3</double></value></member>
+                <member><name>lst_price</name><value><double>12</double></value></member>
+                <member><name>barcode</name><value><string>22222</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function nameSearch500mgXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value><array><data><value><int>610</int></value><value><string>Tableta 500mg</string></value></data></array></value>
+            <value><array><data><value><int>611</int></value><value><string>Acetaminofen 500mg</string></value></data></array></value>
+            <value><array><data><value><int>612</int></value><value><string>Jarabe 500mg</string></value></data></array></value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productRead500mgRankingXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>610</int></value></member>
+                <member><name>name</name><value><string>Tableta 500mg</string></value></member>
+                <member><name>default_code</name><value><string>500MG</string></value></member>
+                <member><name>qty_available</name><value><double>7</double></value></member>
+                <member><name>lst_price</name><value><double>10</double></value></member>
+                <member><name>barcode</name><value><string>50001</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>611</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen 500mg</string></value></member>
+                <member><name>default_code</name><value><string>ACE500</string></value></member>
+                <member><name>qty_available</name><value><double>6</double></value></member>
+                <member><name>lst_price</name><value><double>11</double></value></member>
+                <member><name>barcode</name><value><string>50002</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>612</int></value></member>
+                <member><name>name</name><value><string>Jarabe 500mg</string></value></member>
+                <member><name>default_code</name><value><string>JBE500</string></value></member>
+                <member><name>qty_available</name><value><double>4</double></value></member>
+                <member><name>lst_price</name><value><double>9</double></value></member>
+                <member><name>barcode</name><value><string>50003</string></value></member>
               </struct>
             </value>
           </data>
