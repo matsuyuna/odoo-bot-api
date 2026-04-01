@@ -1681,41 +1681,79 @@ class OdooXmlRpc
     /** Tokeniza como buscador: quita stopwords y separa */
     private function tokenizeQuery(string $q): array
     {
-        $q = mb_strtolower(trim($q));
+        $q = $this->normalizeSearchText($q);
 
         // quita palabras “ruido” comunes
         $stopWords = ['de', 'del', 'la', 'el', 'los', 'las', 'para', 'x', 'por'];
-        $q = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $q); // deja letras/números/espacios
-        $q = preg_replace('/\s+/', ' ', $q);
         $parts = array_values(array_filter(explode(' ', $q)));
 
         $tokens = [];
         foreach ($parts as $p) {
-            if (in_array($p, $stopWords, true)) continue;
-            if (mb_strlen($p) < 2) continue;
+            if (in_array($p, $stopWords, true)) {
+                continue;
+            }
+
+            if (mb_strlen($p) === 1 && !$this->isRelevantSingleCharToken($p)) {
+                continue;
+            }
+
+            if (mb_strlen($p) < 1) {
+                continue;
+            }
+
             $tokens[] = $p;
         }
 
-        // si el usuario escribió "500mg" también ayuda a separar número/letra (opcional)
-        // ejemplo: "500mg" -> "500" y "mg"
         $expanded = [];
         foreach ($tokens as $t) {
+            $expanded[] = $t;
+
             if (preg_match('/^\d+[a-z]+$/i', $t)) {
-                $expanded[] = preg_replace('/[a-z]+$/i', '', $t);
-                $expanded[] = preg_replace('/^\d+/i', '', $t);
-            } else {
-                $expanded[] = $t;
+                $numberPart = preg_replace('/[a-z]+$/i', '', $t);
+                $letterPart = preg_replace('/^\d+/i', '', $t);
+                if ($numberPart !== null && $numberPart !== '') {
+                    $expanded[] = $numberPart;
+                }
+                if ($letterPart !== null && $letterPart !== '') {
+                    $expanded[] = $letterPart;
+                }
+                continue;
+            }
+
+            if (preg_match('/^[a-z]+\d+$/i', $t)) {
+                $letterPart = preg_replace('/\d+$/i', '', $t);
+                $numberPart = preg_replace('/^[a-z]+/i', '', $t);
+                if ($letterPart !== null && $letterPart !== '') {
+                    $expanded[] = $letterPart;
+                }
+                if ($numberPart !== null && $numberPart !== '') {
+                    $expanded[] = $numberPart;
+                }
             }
         }
 
         // únicos manteniendo orden
         $unique = [];
         foreach ($expanded as $t) {
-            if ($t === '') continue;
+            if ($t === '') {
+                continue;
+            }
+
+            if (mb_strlen($t) === 1 && !$this->isRelevantSingleCharToken($t)) {
+                continue;
+            }
+
             if (!in_array($t, $unique, true)) $unique[] = $t;
         }
 
         return $unique;
+    }
+
+    private function isRelevantSingleCharToken(string $token): bool
+    {
+        static $allowedSingleCharTokens = ['a', 'b', 'c', 'd', 'e', 'k'];
+
+        return in_array($token, $allowedSingleCharTokens, true);
     }
 
     private function postXml(string $url, string $xml): string

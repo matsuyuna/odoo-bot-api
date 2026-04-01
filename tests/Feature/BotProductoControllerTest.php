@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\BcvRate;
+use App\Services\OdooXmlRpc;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use ReflectionMethod;
 use Tests\TestCase;
 
 class BotProductoControllerTest extends TestCase
@@ -240,6 +242,25 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('0.default_code', '500MG')
             ->assertJsonPath('1.default_code', 'ACE500')
             ->assertJsonPath('2.default_code', 'JBE500');
+    }
+
+    public function test_tokenize_query_conserva_tokens_unitarios_relevantes_y_alfanumericos(): void
+    {
+        $service = OdooXmlRpc::fromEnv();
+        $method = new ReflectionMethod(OdooXmlRpc::class, 'tokenizeQuery');
+        $method->setAccessible(true);
+
+        $vitaminaTokens = $method->invoke($service, 'vitamina c');
+        $this->assertSame(['vitamina', 'c'], $vitaminaTokens);
+
+        $doseTokens = $method->invoke($service, '500mg');
+        $this->assertSame(['500mg', '500', 'mg'], $doseTokens);
+
+        $b12Tokens = $method->invoke($service, 'b12');
+        $this->assertSame(['b12', 'b', '12'], $b12Tokens);
+
+        $d3Tokens = $method->invoke($service, 'd3');
+        $this->assertSame(['d3', 'd', '3'], $d3Tokens);
     }
 
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
