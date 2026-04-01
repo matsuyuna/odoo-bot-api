@@ -1459,7 +1459,8 @@ class OdooXmlRpc
             return [];
         }
 
-        $pairs = $this->nameSearch('product.product', $query, 1);
+        // Para este endpoint de inspección no filtramos por "(copiar)".
+        $pairs = $this->nameSearch('product.product', $query, 1, false);
         $productId = $pairs[0][0] ?? null;
 
         if (!is_int($productId) || $productId <= 0) {
@@ -1658,12 +1659,12 @@ class OdooXmlRpc
     }
 
     /** name_search(model, name, operator=ilike, limit=N) -> [[id,"Display Name"], ...] */
-    private function nameSearch(string $model, string $term, int $limit = 40): array
+    private function nameSearch(string $model, string $term, int $limit = 40, bool $applyProductCopyExclusions = true): array
     {
         $uid = $this->getUid();
         $args = [];
 
-        if ($model === 'product.product') {
+        if ($model === 'product.product' && $applyProductCopyExclusions) {
             $args = $this->appendProductCopyExclusions([
                 ['active', '=', true],
             ]);
