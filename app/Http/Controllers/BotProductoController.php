@@ -22,7 +22,7 @@ class BotProductoController extends Controller
 
         try {
             $odoo = OdooXmlRpc::fromEnv();
-            $productos = $odoo->searchProductsSmart($nombre, 10);
+            $productos = $odoo->searchProductsSmart($nombre, 20);
             $latestRates = $this->getLatestBcvRates();
 
             $respuesta = array_map(function (array $producto) use ($latestRates) {
@@ -88,7 +88,7 @@ class BotProductoController extends Controller
 
         try {
             $odoo = OdooXmlRpc::fromEnv();
-            $productos = $odoo->searchProductsSmart($nombre, 10);
+            $productos = $odoo->searchProductsSmart($nombre, 20);
             $latestRates = $this->getLatestBcvRates();
 
             $respuesta = array_map(function (array $producto) use ($latestRates) {
