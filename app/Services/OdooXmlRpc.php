@@ -90,6 +90,19 @@ class OdooXmlRpc
             'phrase_ids' => $phraseFirstIds,
             'ids_by_token' => $idsByToken,
         ]);
+        Log::debug('searchProductsSmart.debug_tokens', [
+            'query' => $query,
+            'tokens' => $tokens,
+            'search_tokens' => $searchTokens,
+        ]);
+        Log::debug('searchProductsSmart.debug_phrase_first_ids', [
+            'query' => $query,
+            'phrase_ids' => $phraseFirstIds,
+        ]);
+        Log::debug('searchProductsSmart.debug_ids_by_token', [
+            'query' => $query,
+            'ids_by_token' => $idsByToken,
+        ]);
 
         // AND: ids comunes a todos los tokens
         $idsFinal = $idSets[0] ?? [];
@@ -121,14 +134,60 @@ class OdooXmlRpc
 
         if (!$idsFinal) return [];
 
+        Log::debug('searchProductsSmart.debug_ids_final', [
+            'query' => $query,
+            'ids_final' => $idsFinal,
+        ]);
+
         // read para traer campos
         $rows = $this->read('product.product', $idsFinal, [
             'id', 'name', 'default_code', 'qty_available', 'barcode', 'lst_price'
         ]);
-        $rows = $this->sortProductsByRelevance($rows, $query);
+        Log::debug('searchProductsSmart.debug_rows_after_read', [
+            'query' => $query,
+            'rows_after_read' => array_map(
+                fn (array $row): array => $this->debugProductRow($row),
+                $rows
+            ),
+        ]);
 
         $normalizedQuery = $this->normalizeSearchText($query);
         $scoreTokens = $this->tokenizeQuery($normalizedQuery);
+
+        $rowsBeforeStrict = array_map(
+            fn (array $row): array => [
+                'id' => $row['id'] ?? null,
+                'name' => $row['name'] ?? null,
+                'default_code' => $row['default_code'] ?? null,
+            ],
+            $rows
+        );
+        Log::debug('searchProductsSmart.debug_rows_before_strict', [
+            'query' => $query,
+            'rows_before_strict' => $rowsBeforeStrict,
+        ]);
+
+        if (count($scoreTokens) > 1) {
+            $strictRows = array_values(array_filter(
+                $rows,
+                fn (array $row): bool => $this->rowMatchesAllQueryTokens($row, $scoreTokens, $normalizedQuery)
+            ));
+
+            Log::debug('searchProductsSmart.debug_strict_rows', [
+                'query' => $query,
+                'strict_rows' => array_map(
+                    fn (array $row): array => $this->debugProductRow($row),
+                    $strictRows
+                ),
+            ]);
+
+            if (!empty($strictRows)) {
+                $rows = $strictRows;
+            }
+        }
+
+        $rows = $this->sortProductsByRelevance($rows, $query);
+
         $topScores = [];
         foreach (array_slice($rows, 0, 5) as $row) {
             $topScores[] = [
@@ -148,16 +207,42 @@ class OdooXmlRpc
         if (!empty($storeLocationIds)) {
             $qtyByProductId = $this->readQtyAvailableByLocations($idsFinal, $storeLocationIds);
         }
+        Log::debug('searchProductsSmart.debug_qty_by_product_id', [
+            'query' => $query,
+            'qty_by_product_id' => $qtyByProductId,
+        ]);
+
+        $strictRowsWithStock = array_map(
+            fn (array $row): array => $this->debugProductRow($row, $qtyByProductId),
+            $rows
+        );
+        Log::debug('searchProductsSmart.debug_strict_rows_with_stock', [
+            'query' => $query,
+            'strict_rows_with_stock' => $strictRowsWithStock,
+        ]);
 
         // Normaliza salida y excluye productos sin disponibilidad.
         $out = [];
         foreach ($rows as $r) {
+            $excludedReason = 'included';
             if ($this->isCopyProductName((string) ($r['name'] ?? ''))) {
+                $excludedReason = 'copy_name';
+                Log::debug('searchProductsSmart.debug_out_loop', [
+                    'query' => $query,
+                    'row' => $this->debugProductRow($r, $qtyByProductId),
+                    'excluded_reason' => $excludedReason,
+                ]);
                 continue;
             }
 
             $qtyAvailable = (float) ($qtyByProductId[$r['id'] ?? 0] ?? ($r['qty_available'] ?? 0));
             if ($qtyAvailable <= 0) {
+                $excludedReason = 'no_stock';
+                Log::debug('searchProductsSmart.debug_out_loop', [
+                    'query' => $query,
+                    'row' => $this->debugProductRow($r, $qtyByProductId),
+                    'excluded_reason' => $excludedReason,
+                ]);
                 continue;
             }
 
@@ -169,9 +254,29 @@ class OdooXmlRpc
                 'qty_available' => $qtyAvailable,
                 'price' => $r['lst_price'] ?? 0,
             ];
+            Log::debug('searchProductsSmart.debug_out_loop', [
+                'query' => $query,
+                'row' => $this->debugProductRow($r, $qtyByProductId),
+                'excluded_reason' => $excludedReason,
+            ]);
         }
 
-        return array_slice($out, 0, $limit);
+        Log::debug('searchProductsSmart.debug_out_before_slice', [
+            'query' => $query,
+            'out_before_slice' => $out,
+            'count' => count($out),
+            'limit' => $limit,
+        ]);
+
+        $outSliced = array_slice($out, 0, $limit);
+        Log::debug('searchProductsSmart.debug_out_after_slice', [
+            'query' => $query,
+            'out_after_slice' => $outSliced,
+            'count' => count($outSliced),
+            'limit' => $limit,
+        ]);
+
+        return $outSliced;
     }
 
     /**
@@ -186,11 +291,12 @@ class OdooXmlRpc
             return [];
         }
 
-        $rows = $this->searchRead(
+        $rows = $this->searchReadRaw(
             'product.product',
             ['&', ['active', '=', true], '|', ['name', 'ilike', $normalizedQuery], ['default_code', 'ilike', $normalizedQuery]],
             ['id', 'name', 'default_code'],
-            max(1, $limit)
+            max(1, $limit),
+            'id desc'
         );
         $rows = $this->sortProductsByRelevance($rows, $normalizedQuery);
 
@@ -211,6 +317,58 @@ class OdooXmlRpc
         }
 
         return $ids;
+    }
+
+    /**
+     * @param string[] $queryTokens
+     * @param array<string,mixed> $row
+     */
+    private function rowMatchesAllQueryTokens(array $row, array $queryTokens, string $normalizedQuery): bool
+    {
+        $name = $this->normalizeSearchText((string) ($row['name'] ?? ''));
+        $code = $this->normalizeSearchText((string) ($row['default_code'] ?? ''));
+
+        if ($normalizedQuery !== '') {
+            if (str_contains($name, $normalizedQuery) || str_contains($code, $normalizedQuery)) {
+                return true;
+            }
+        }
+
+        foreach ($queryTokens as $token) {
+            $token = trim($token);
+            if ($token === '') {
+                continue;
+            }
+
+            if (
+                !$this->tokenMatches($token, $name) &&
+                !$this->tokenMatches($token, $code)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array<string,mixed> $row
+     * @param array<int,float> $qtyByProductId
+     * @return array<string,mixed>
+     */
+    private function debugProductRow(array $row, array $qtyByProductId = []): array
+    {
+        $id = (int) ($row['id'] ?? 0);
+        $qtyOriginal = (float) ($row['qty_available'] ?? 0);
+        $qtyEffective = (float) ($qtyByProductId[$id] ?? $qtyOriginal);
+
+        return [
+            'id' => $row['id'] ?? null,
+            'name' => $row['name'] ?? null,
+            'default_code' => $row['default_code'] ?? null,
+            'qty_available_original' => $qtyOriginal,
+            'qty_available_effective' => $qtyEffective,
+        ];
     }
 
     private function isCopyProductName(string $name): bool
