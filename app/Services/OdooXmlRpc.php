@@ -414,9 +414,18 @@ class OdooXmlRpc
         // sobre search_read para tolerar pequeñas variaciones ortográficas.
         if (empty($merged) && $model === 'product.product') {
             foreach ($this->expandPrefixFallbackTerms($term) as $prefix) {
+                $andConditions = $this->appendProductCopyExclusions([
+                    ['active', '=', true],
+                ]);
+                $domain = array_merge(
+                    array_fill(0, count($andConditions), '&'),
+                    $andConditions,
+                    ['|', ['name', 'ilike', $prefix], ['default_code', 'ilike', $prefix]]
+                );
+
                 $rows = $this->searchRead(
                     'product.product',
-                    ['&', ['active', '=', true], '|', ['name', 'ilike', $prefix], ['default_code', 'ilike', $prefix]],
+                    $domain,
                     ['id', 'name'],
                     $limit
                 );
@@ -1655,7 +1664,9 @@ class OdooXmlRpc
         $args = [];
 
         if ($model === 'product.product') {
-            $args = [['active', '=', true]];
+            $args = $this->appendProductCopyExclusions([
+                ['active', '=', true],
+            ]);
         }
 
         $xml = $this->buildMethodCall('execute_kw', [
@@ -1676,6 +1687,33 @@ class OdooXmlRpc
         $parsed = $this->parseXmlRpc($raw);
 
         return is_array($parsed) ? $parsed : [];
+    }
+
+    /**
+     * @param array<int,mixed> $domain
+     * @return array<int,mixed>
+     */
+    private function appendProductCopyExclusions(array $domain): array
+    {
+        foreach ($this->copyProductNameTerms() as $term) {
+            $domain[] = ['name', 'not ilike', $term];
+        }
+
+        return $domain;
+    }
+
+    /**
+     * @return string[]
+     */
+    private function copyProductNameTerms(): array
+    {
+        return [
+            'copiar',
+            '(copiar)',
+            '( copiar)',
+            '(copiar )',
+            '( copiar )',
+        ];
     }
 
     /** read(model, ids, fields) -> array de dicts */
