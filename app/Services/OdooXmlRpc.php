@@ -68,6 +68,10 @@ class OdooXmlRpc
             return [];
         }
 
+        $phraseFirstIds = count($tokens) > 1
+            ? $this->searchProductsByFullPhrase($query, $limit * 3)
+            : [];
+
         $idSets = [];
         foreach ($tokens as $t) {
             $pairs = $this->nameSearchByTermVariants('product.product', $t, $limit * 3);
@@ -85,6 +89,20 @@ class OdooXmlRpc
         if (!$idsFinal) {
             $pairs = $this->nameSearchByTermVariants('product.product', $tokens[0], $limit * 2);
             $idsFinal = array_values(array_filter(array_map(fn($p) => $p[0] ?? null, $pairs), fn($x) => is_int($x)));
+        }
+
+        if (!empty($phraseFirstIds)) {
+            $mergedIds = [];
+            $seenIds = [];
+            foreach (array_merge($phraseFirstIds, $idsFinal) as $id) {
+                if (!is_int($id) || isset($seenIds[$id])) {
+                    continue;
+                }
+
+                $seenIds[$id] = true;
+                $mergedIds[] = $id;
+            }
+            $idsFinal = $mergedIds;
         }
 
         $idsFinal = array_slice($idsFinal, 0, max($limit * 4, $limit));
@@ -127,6 +145,45 @@ class OdooXmlRpc
         }
 
         return array_slice($out, 0, $limit);
+    }
+
+    /**
+     * Busca por frase completa en name/default_code antes del flujo por tokens.
+     *
+     * @return int[]
+     */
+    private function searchProductsByFullPhrase(string $query, int $limit): array
+    {
+        $normalizedQuery = $this->normalizeSearchText($query);
+        if ($normalizedQuery === '') {
+            return [];
+        }
+
+        $rows = $this->searchRead(
+            'product.product',
+            ['&', ['active', '=', true], '|', ['name', 'ilike', $normalizedQuery], ['default_code', 'ilike', $normalizedQuery]],
+            ['id', 'name', 'default_code'],
+            max(1, $limit)
+        );
+        $rows = $this->sortProductsByRelevance($rows, $normalizedQuery);
+
+        $ids = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $id = $row['id'] ?? null;
+            if (!is_int($id) || isset($seen[$id])) {
+                continue;
+            }
+
+            $seen[$id] = true;
+            $ids[] = $id;
+
+            if (count($ids) >= $limit) {
+                break;
+            }
+        }
+
+        return $ids;
     }
 
     private function isCopyProductName(string $name): bool
@@ -323,8 +380,10 @@ class OdooXmlRpc
             return 0.0;
         }
 
-        $containsBonus = str_contains($name, $normalizedQuery) ? 1.0 : 0.0;
-        $startsBonus = str_starts_with($name, $normalizedQuery) ? 1.0 : 0.0;
+        $nameExactBonus = $name !== '' && $name === $normalizedQuery ? 1.0 : 0.0;
+        $defaultCodeExactBonus = $code !== '' && $code === $normalizedQuery ? 1.0 : 0.0;
+        $phraseContainsInNameBonus = str_contains($name, $normalizedQuery) ? 1.0 : 0.0;
+        $phraseStartsInNameBonus = str_starts_with($name, $normalizedQuery) ? 1.0 : 0.0;
 
         $maxLen = max(mb_strlen($normalizedQuery), mb_strlen($haystack));
         $levScore = 0.0;
@@ -371,8 +430,10 @@ class OdooXmlRpc
         // Pesos para priorizar coincidencia real, pero permitiendo typo/cambios mínimos.
         $score = ($tokenAverage * 0.60)
             + ($levScore * 0.25)
-            + ($containsBonus * 0.10)
-            + ($startsBonus * 0.05)
+            + ($nameExactBonus * 1.70)
+            + ($defaultCodeExactBonus * 1.60)
+            + ($phraseContainsInNameBonus * 0.85)
+            + ($phraseStartsInNameBonus * 1.15)
             + ($coverageInName * 0.15)
             + ($compactnessBonus * 0.05)
             + ($defaultCodePriority * 0.35)
