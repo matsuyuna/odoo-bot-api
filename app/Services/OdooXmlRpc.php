@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class OdooXmlRpc
@@ -63,6 +64,7 @@ class OdooXmlRpc
     public function searchProductsSmart(string $query, int $limit = 20): array
     {
         $tokens = $this->tokenizeQuery($query);
+        $searchTokens = array_values(array_filter($tokens, fn (string $t): bool => mb_strlen($t) > 1));
 
         if (!$tokens) {
             return [];
@@ -72,12 +74,22 @@ class OdooXmlRpc
             ? $this->searchProductsByFullPhrase($query, $limit * 3)
             : [];
 
+        $idsByToken = [];
         $idSets = [];
-        foreach ($tokens as $t) {
+        foreach ($searchTokens as $t) {
             $pairs = $this->nameSearchByTermVariants('product.product', $t, $limit * 3);
             $ids = array_values(array_filter(array_map(fn($p) => $p[0] ?? null, $pairs), fn($x) => is_int($x)));
+            $idsByToken[$t] = $ids;
             $idSets[] = $ids;
         }
+
+        Log::debug('searchProductsSmart.debug_tokens_and_ids', [
+            'query' => $query,
+            'tokens' => $tokens,
+            'search_tokens' => $searchTokens,
+            'phrase_ids' => $phraseFirstIds,
+            'ids_by_token' => $idsByToken,
+        ]);
 
         // AND: ids comunes a todos los tokens
         $idsFinal = $idSets[0] ?? [];
@@ -86,8 +98,8 @@ class OdooXmlRpc
         }
 
         // Si no hubo intersección, fallback: usa solo el primer token (mejor UX)
-        if (!$idsFinal) {
-            $pairs = $this->nameSearchByTermVariants('product.product', $tokens[0], $limit * 2);
+        if (!$idsFinal && !empty($searchTokens)) {
+            $pairs = $this->nameSearchByTermVariants('product.product', $searchTokens[0], $limit * 2);
             $idsFinal = array_values(array_filter(array_map(fn($p) => $p[0] ?? null, $pairs), fn($x) => is_int($x)));
         }
 
@@ -114,6 +126,21 @@ class OdooXmlRpc
             'id', 'name', 'default_code', 'qty_available', 'barcode', 'lst_price'
         ]);
         $rows = $this->sortProductsByRelevance($rows, $query);
+
+        $normalizedQuery = $this->normalizeSearchText($query);
+        $scoreTokens = $this->tokenizeQuery($normalizedQuery);
+        $topScores = [];
+        foreach (array_slice($rows, 0, 5) as $row) {
+            $topScores[] = [
+                'id' => $row['id'] ?? null,
+                'name' => $row['name'] ?? null,
+                'score' => $this->productRelevanceScore($row, $normalizedQuery, $scoreTokens),
+            ];
+        }
+        Log::debug('searchProductsSmart.debug_top_scores', [
+            'query' => $query,
+            'top_scores' => $topScores,
+        ]);
 
         $qtyByProductId = [];
         $storeLocationIds = $this->getStoreLocationIds();
@@ -489,12 +516,22 @@ class OdooXmlRpc
             return 0.0;
         }
 
-        $escapedToken = preg_quote($token, '/');
-        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $name) === 1) {
+        if (mb_strlen($token) === 1) {
+            if ($this->hasDelimitedTokenMatch($token, $name)) {
+                return 1.0;
+            }
+            if ($this->hasDelimitedTokenMatch($token, $code)) {
+                return $isMultiTokenQuery ? 0.55 : 0.85;
+            }
+
+            return 0.0;
+        }
+
+        if ($this->hasDelimitedTokenMatch($token, $name)) {
             return 1.0;
         }
 
-        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $code) === 1) {
+        if ($this->hasDelimitedTokenMatch($token, $code)) {
             return $isMultiTokenQuery ? 0.55 : 0.85;
         }
 
@@ -524,12 +561,22 @@ class OdooXmlRpc
             return false;
         }
 
-        $escapedToken = preg_quote($token, '/');
-        if (preg_match('/(?:^|\s)' . $escapedToken . '(?:\s|$)/u', $value) === 1) {
+        if ($this->hasDelimitedTokenMatch($token, $value)) {
             return true;
         }
 
+        if (mb_strlen($token) === 1) {
+            return false;
+        }
+
         return str_contains($value, $token);
+    }
+
+    private function hasDelimitedTokenMatch(string $token, string $value): bool
+    {
+        $escapedToken = preg_quote($token, '/');
+
+        return preg_match('/(?:^|[^\p{L}\p{N}])' . $escapedToken . '(?:$|[^\p{L}\p{N}])/u', $value) === 1;
     }
 
     /**

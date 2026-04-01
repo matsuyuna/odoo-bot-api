@@ -204,6 +204,24 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('3.name', 'Vitamina D 2000UI');
     }
 
+    public function test_buscar_objcompleto_no_hace_name_search_para_token_unitario(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->searchReadPhraseVitaminaCXml(), 200)
+                ->push($this->nameSearchVitaminaXml(), 200)
+                ->push($this->productReadVitaminasXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=vitamina c');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('0.default_code', 'VITAMINA C')
+            ->assertJsonPath('1.name', 'Vitamina C 1g');
+    }
+
     public function test_buscar_objcompleto_prioriza_frase_completa_en_query_compuesta(): void
     {
         Http::fake([
@@ -261,6 +279,17 @@ class BotProductoControllerTest extends TestCase
 
         $d3Tokens = $method->invoke($service, 'd3');
         $this->assertSame(['d3', 'd', '3'], $d3Tokens);
+    }
+
+    public function test_token_matches_unitario_no_coincide_por_substring_libre(): void
+    {
+        $service = OdooXmlRpc::fromEnv();
+        $method = new ReflectionMethod(OdooXmlRpc::class, 'tokenMatches');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke($service, 'c', 'vitamina c 1g'));
+        $this->assertFalse($method->invoke($service, 'c', 'calcibon vitamina d'));
+        $this->assertFalse($method->invoke($service, 'c', 'calcio vitamina d'));
     }
 
     public function test_buscar_producto_no_actualiza_wati_si_no_hay_whatsapp_number(): void
