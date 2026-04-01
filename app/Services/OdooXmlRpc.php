@@ -107,6 +107,10 @@ class OdooXmlRpc
         // Normaliza salida y excluye productos sin disponibilidad.
         $out = [];
         foreach ($rows as $r) {
+            if ($this->isCopyProductName((string) ($r['name'] ?? ''))) {
+                continue;
+            }
+
             $qtyAvailable = (float) ($qtyByProductId[$r['id'] ?? 0] ?? ($r['qty_available'] ?? 0));
             if ($qtyAvailable <= 0) {
                 continue;
@@ -123,6 +127,13 @@ class OdooXmlRpc
         }
 
         return array_slice($out, 0, $limit);
+    }
+
+    private function isCopyProductName(string $name): bool
+    {
+        $normalizedName = preg_replace('/\s+/u', '', mb_strtolower(trim($name))) ?? '';
+
+        return str_contains($normalizedName, '(copiar)');
     }
 
     /**
