@@ -121,14 +121,57 @@ class OdooXmlRpc
 
         if (!$idsFinal) return [];
 
+        Log::debug('searchProductsSmart.debug_ids_final', [
+            'query' => $query,
+            'ids_final' => $idsFinal,
+        ]);
+
         // read para traer campos
         $rows = $this->read('product.product', $idsFinal, [
             'id', 'name', 'default_code', 'qty_available', 'barcode', 'lst_price'
         ]);
-        $rows = $this->sortProductsByRelevance($rows, $query);
 
         $normalizedQuery = $this->normalizeSearchText($query);
         $scoreTokens = $this->tokenizeQuery($normalizedQuery);
+
+        $rowsBeforeStrict = array_map(
+            fn (array $row): array => [
+                'id' => $row['id'] ?? null,
+                'name' => $row['name'] ?? null,
+                'default_code' => $row['default_code'] ?? null,
+            ],
+            $rows
+        );
+        Log::debug('searchProductsSmart.debug_rows_before_strict', [
+            'query' => $query,
+            'rows_before_strict' => $rowsBeforeStrict,
+        ]);
+
+        if (count($scoreTokens) > 1) {
+            $strictRows = array_values(array_filter(
+                $rows,
+                fn (array $row): bool => $this->rowMatchesAllQueryTokens($row, $scoreTokens, $normalizedQuery)
+            ));
+
+            Log::debug('searchProductsSmart.debug_strict_rows', [
+                'query' => $query,
+                'strict_rows' => array_map(
+                    fn (array $row): array => [
+                        'id' => $row['id'] ?? null,
+                        'name' => $row['name'] ?? null,
+                        'default_code' => $row['default_code'] ?? null,
+                    ],
+                    $strictRows
+                ),
+            ]);
+
+            if (!empty($strictRows)) {
+                $rows = $strictRows;
+            }
+        }
+
+        $rows = $this->sortProductsByRelevance($rows, $query);
+
         $topScores = [];
         foreach (array_slice($rows, 0, 5) as $row) {
             $topScores[] = [
@@ -186,11 +229,12 @@ class OdooXmlRpc
             return [];
         }
 
-        $rows = $this->searchRead(
+        $rows = $this->searchReadRaw(
             'product.product',
             ['&', ['active', '=', true], '|', ['name', 'ilike', $normalizedQuery], ['default_code', 'ilike', $normalizedQuery]],
             ['id', 'name', 'default_code'],
-            max(1, $limit)
+            max(1, $limit),
+            'id desc'
         );
         $rows = $this->sortProductsByRelevance($rows, $normalizedQuery);
 
@@ -211,6 +255,38 @@ class OdooXmlRpc
         }
 
         return $ids;
+    }
+
+    /**
+     * @param string[] $queryTokens
+     * @param array<string,mixed> $row
+     */
+    private function rowMatchesAllQueryTokens(array $row, array $queryTokens, string $normalizedQuery): bool
+    {
+        $name = $this->normalizeSearchText((string) ($row['name'] ?? ''));
+        $code = $this->normalizeSearchText((string) ($row['default_code'] ?? ''));
+
+        if ($normalizedQuery !== '') {
+            if (str_contains($name, $normalizedQuery) || str_contains($code, $normalizedQuery)) {
+                return true;
+            }
+        }
+
+        foreach ($queryTokens as $token) {
+            $token = trim($token);
+            if ($token === '') {
+                continue;
+            }
+
+            if (
+                !$this->tokenMatches($token, $name) &&
+                !$this->tokenMatches($token, $code)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function isCopyProductName(string $name): bool
