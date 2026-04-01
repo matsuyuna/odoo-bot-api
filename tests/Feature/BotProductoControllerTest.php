@@ -124,6 +124,24 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('1.name', 'Acetaminofen Infantil');
     }
 
+    public function test_buscar_objcompleto_excluye_productos_con_copiar_en_nombre_sin_importar_formato(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->nameSearchXml(), 200)
+                ->push($this->productReadWithCopyVariantsXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto-objcompleto?nombre=acetaminofen');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonPath('0.name', 'Acetaminofen 500mg')
+            ->assertJsonPath('1.name', 'Acetaminofen Infantil');
+    }
+
     public function test_buscar_objcompleto_prioriza_coincidencia_mas_cercana_por_similitud(): void
     {
         Http::fake([
@@ -215,6 +233,22 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('availability_text', 'No encontramos ningún producto bajo esa descripción');
 
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'updateContactAttributes'));
+    }
+
+    public function test_buscar_producto_excluye_productos_con_copiar_en_nombre_sin_importar_espacios_y_mayusculas(): void
+    {
+        Http::fake([
+            'https://odoo.test/xmlrpc/2/common' => Http::response($this->authXml(9), 200),
+            'https://odoo.test/xmlrpc/2/object' => Http::sequence()
+                ->push($this->nameSearchXml(), 200)
+                ->push($this->productReadWithCopyVariantsXml(), 200),
+        ]);
+
+        $response = $this->getJson('/api/buscar-producto?nombre=acetaminofen');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('availability_text', "- Acetaminofen 500mg Sí hay disponible Precio 20 bs\n\n- Acetaminofen Infantil Sí hay disponible Precio 12 bs");
     }
 
     public function test_buscar_producto_suma_stock_solo_en_depositos_configurados(): void
@@ -494,6 +528,65 @@ XML;
                 <member><name>qty_available</name><value><double>3</double></value></member>
                 <member><name>lst_price</name><value><double>50.0</double></value></member>
                 <member><name>barcode</name><value><string>44444</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productReadWithCopyVariantsXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>501</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen 500mg</string></value></member>
+                <member><name>default_code</name><value><string>ACE500</string></value></member>
+                <member><name>qty_available</name><value><double>11</double></value></member>
+                <member><name>lst_price</name><value><double>19.9</double></value></member>
+                <member><name>barcode</name><value><string>12345</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>777</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen (COPIAR)</string></value></member>
+                <member><name>default_code</name><value><string>ACECOP1</string></value></member>
+                <member><name>qty_available</name><value><double>8</double></value></member>
+                <member><name>lst_price</name><value><double>18.0</double></value></member>
+                <member><name>barcode</name><value><string>55555</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>778</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen ( cOpIaR )</string></value></member>
+                <member><name>default_code</name><value><string>ACECOP2</string></value></member>
+                <member><name>qty_available</name><value><double>5</double></value></member>
+                <member><name>lst_price</name><value><double>17.0</double></value></member>
+                <member><name>barcode</name><value><string>66666</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>502</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen Infantil</string></value></member>
+                <member><name>default_code</name><value><string>ACEINF</string></value></member>
+                <member><name>qty_available</name><value><double>4</double></value></member>
+                <member><name>lst_price</name><value><double>12.4</double></value></member>
+                <member><name>barcode</name><value><string>67890</string></value></member>
               </struct>
             </value>
           </data>
