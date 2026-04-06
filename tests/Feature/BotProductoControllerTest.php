@@ -35,7 +35,9 @@ class BotProductoControllerTest extends TestCase
             'https://odoo.test/xmlrpc/2/object' => Http::sequence()
                 ->push($this->nameSearchXml(), 200)
                 ->push($this->productFieldsGetXml(), 200)
-                ->push($this->productInspectReadXml(), 200),
+                ->push($this->productInspectReadXml(), 200)
+                ->push($this->productTemplateFieldsGetXml(), 200)
+                ->push($this->productTemplateReadXml(), 200),
         ]);
 
         $response = $this->getJson('/api/inspeccionar-producto?nombre=acetaminofen');
@@ -45,6 +47,8 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('id', 501)
             ->assertJsonPath('record.lst_price', 19.9)
             ->assertJsonPath('record.x_price_bs', 745.2)
+            ->assertJsonPath('product_template.id', 701)
+            ->assertJsonPath('product_template.record.name', 'Acetaminofen')
             ->assertJsonPath('price_candidates.lst_price.value', 19.9)
             ->assertJsonPath('price_candidates.x_price_bs.value', 745.2);
     }
@@ -1174,8 +1178,66 @@ XML;
               <struct>
                 <member><name>id</name><value><int>501</int></value></member>
                 <member><name>name</name><value><string>Acetaminofen 500mg</string></value></member>
+                <member><name>product_tmpl_id</name><value><array><data><value><int>701</int></value><value><string>Acetaminofen</string></value></data></array></value></member>
                 <member><name>lst_price</name><value><double>19.9</double></value></member>
                 <member><name>x_price_bs</name><value><double>745.2</double></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productTemplateFieldsGetXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <struct>
+          <member>
+            <name>name</name>
+            <value><struct>
+              <member><name>string</name><value><string>Nombre</string></value></member>
+              <member><name>type</name><value><string>char</string></value></member>
+            </struct></value>
+          </member>
+          <member>
+            <name>list_price</name>
+            <value><struct>
+              <member><name>string</name><value><string>Precio de Venta</string></value></member>
+              <member><name>type</name><value><string>float</string></value></member>
+            </struct></value>
+          </member>
+        </struct>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productTemplateReadXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>701</int></value></member>
+                <member><name>name</name><value><string>Acetaminofen</string></value></member>
+                <member><name>list_price</name><value><double>19.9</double></value></member>
               </struct>
             </value>
           </data>
