@@ -1475,6 +1475,27 @@ class OdooXmlRpc
             $fieldNames,
         );
 
+        $productTemplate = null;
+        $productTemplateId = $this->extractRelationId($record['product_tmpl_id'] ?? null);
+
+        if ($productTemplateId !== null) {
+            $templateFields = $this->fieldsGet('product.template');
+            $templateFieldNames = array_keys($templateFields);
+            ['record' => $templateRecord, 'unreadable_fields' => $templateUnreadableFields] = $this->readRecordSafely(
+                'product.template',
+                $productTemplateId,
+                $templateFieldNames,
+            );
+
+            $productTemplate = [
+                'id' => $productTemplateId,
+                'display_name' => is_array($record['product_tmpl_id'] ?? null) ? ($record['product_tmpl_id'][1] ?? null) : null,
+                'fields' => $templateFields,
+                'record' => $templateRecord,
+                'unreadable_fields' => $templateUnreadableFields,
+            ];
+        }
+
         $priceCandidates = [];
         foreach ($fields as $fieldName => $meta) {
             $label = mb_strtolower((string) ($meta['string'] ?? ''));
@@ -1503,9 +1524,31 @@ class OdooXmlRpc
             'display_name' => $pairs[0][1] ?? null,
             'fields' => $fields,
             'record' => $record,
+            'product_template' => $productTemplate,
             'unreadable_fields' => $unreadableFields,
             'price_candidates' => $priceCandidates,
         ];
+    }
+
+    private function extractRelationId(mixed $value): ?int
+    {
+        if (is_int($value) && $value > 0) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            $id = $value[0] ?? null;
+
+            if (is_int($id) && $id > 0) {
+                return $id;
+            }
+
+            if (is_numeric($id) && (int) $id > 0) {
+                return (int) $id;
+            }
+        }
+
+        return null;
     }
 
     /**
