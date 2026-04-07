@@ -37,7 +37,9 @@ class BotProductoControllerTest extends TestCase
                 ->push($this->productFieldsGetXml(), 200)
                 ->push($this->productInspectReadXml(), 200)
                 ->push($this->productTemplateFieldsGetXml(), 200)
-                ->push($this->productTemplateReadXml(), 200),
+                ->push($this->productTemplateReadXml(), 200)
+                ->push($this->productTemplateReadEsDoXml(), 200)
+                ->push($this->productVariantReadEsDoXml(), 200),
         ]);
 
         $response = $this->getJson('/api/inspeccionar-producto?nombre=acetaminofen');
@@ -49,6 +51,10 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('record.x_price_bs', 745.2)
             ->assertJsonPath('product_template.id', 701)
             ->assertJsonPath('product_template.record.name', 'Acetaminofen')
+            ->assertJsonPath('inspeccion_names.template.name', 'Acetaminofen')
+            ->assertJsonPath('inspeccion_names.template.name_es_DO', 'Acetaminofén')
+            ->assertJsonPath('inspeccion_names.variant.name', 'Acetaminofen 500mg')
+            ->assertJsonPath('inspeccion_names.variant.display_name_es_DO', 'Acetaminofén 500mg')
             ->assertJsonPath('price_candidates.lst_price.value', 19.9)
             ->assertJsonPath('price_candidates.x_price_bs.value', 745.2);
     }
@@ -62,7 +68,8 @@ class BotProductoControllerTest extends TestCase
                 ->push($this->nameSearchXml(), 200)
                 ->push($this->productFieldsGetWithBrokenFieldXml(), 200)
                 ->push($this->xmlRpcFaultReadUnknownField(), 200)
-                ->push($this->productInspectReadWithoutBrokenFieldXml(), 200),
+                ->push($this->productInspectReadWithoutBrokenFieldXml(), 200)
+                ->push($this->productVariantReadEsDoXml(), 200),
         ]);
 
         $response = $this->getJson('/api/inspeccionar-producto?nombre=acetaminofen');
@@ -73,6 +80,8 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonPath('record.lst_price', 19.9)
             ->assertJsonPath('record.x_broken_rel', null)
             ->assertJsonPath('unreadable_fields.0', 'x_broken_rel')
+            ->assertJsonPath('inspeccion_names.template.name', null)
+            ->assertJsonPath('inspeccion_names.variant.display_name_es_DO', 'Acetaminofén 500mg')
             ->assertJsonPath('price_candidates.lst_price.value', 19.9);
     }
     public function test_buscar_producto_actualiza_custom_param_productos_en_wati(): void
@@ -1238,6 +1247,58 @@ XML;
                 <member><name>id</name><value><int>701</int></value></member>
                 <member><name>name</name><value><string>Acetaminofen</string></value></member>
                 <member><name>list_price</name><value><double>19.9</double></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productTemplateReadEsDoXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>701</int></value></member>
+                <member><name>name</name><value><string>Acetaminofén</string></value></member>
+                <member><name>display_name</name><value><string>Acetaminofén</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>
+XML;
+    }
+
+    private function productVariantReadEsDoXml(): string
+    {
+        return <<<'XML'
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>501</int></value></member>
+                <member><name>name</name><value><string>Acetaminofén 500mg</string></value></member>
+                <member><name>display_name</name><value><string>Acetaminofén 500mg</string></value></member>
               </struct>
             </value>
           </data>
