@@ -1453,104 +1453,329 @@ class OdooXmlRpc
      */
     public function inspectProductByName(string $query): array
     {
-        $query = trim($query);
+        return $this->inspectProductNameSources([
+            'product_name' => $query,
+        ]);
+    }
 
-        if ($query === '') {
+    public function inspectProductNameSources(array $input): array
+    {
+        $templateId = $this->normalizeId($input['product_template_id'] ?? null);
+        $variantId = $this->normalizeId($input['product_product_id'] ?? null);
+        $productName = trim((string) ($input['product_name'] ?? ''));
+        $lang = trim((string) ($input['lang'] ?? ''));
+
+        if ($variantId === null && $templateId === null && $productName === '') {
             return [];
         }
 
-        // Para este endpoint de inspección no filtramos por "(copiar)".
-        $pairs = $this->nameSearch('product.product', $query, 1, false);
-        $productId = $pairs[0][0] ?? null;
+        if ($variantId === null && $productName !== '') {
+            $pairs = $this->nameSearch('product.product', $productName, 1, false);
+            $variantId = $this->normalizeId($pairs[0][0] ?? null);
+        }
 
-        if (!is_int($productId) || $productId <= 0) {
+        $variantRows = [];
+        if ($variantId !== null) {
+            $variantRows = $this->read('product.product', [$variantId], [
+                'id', 'name', 'display_name', 'default_code', 'barcode', 'description', 'description_sale',
+                'product_tmpl_id', 'product_variant_id', 'product_variant_ids', 'create_date', 'write_date', 'active',
+            ]);
+            $variantRow = $variantRows[0] ?? [];
+            $templateIdFromVariant = $this->extractRelationId($variantRow['product_tmpl_id'] ?? null);
+            if ($templateId === null && $templateIdFromVariant !== null) {
+                $templateId = $templateIdFromVariant;
+            }
+        }
+
+        $templateRows = [];
+        if ($templateId !== null) {
+            $templateRows = $this->read('product.template', [$templateId], [
+                'id', 'name', 'display_name', 'default_code', 'barcode', 'description', 'description_sale',
+                'product_variant_id', 'product_variant_ids', 'create_date', 'write_date', 'active',
+            ]);
+            $templateRow = $templateRows[0] ?? [];
+            if ($variantId === null) {
+                $variantId = $this->extractRelationId($templateRow['product_variant_id'] ?? null);
+            }
+        }
+
+        if ($variantId !== null && empty($variantRows)) {
+            $variantRows = $this->read('product.product', [$variantId], [
+                'id', 'name', 'display_name', 'default_code', 'barcode', 'description', 'description_sale',
+                'product_tmpl_id', 'product_variant_id', 'product_variant_ids', 'create_date', 'write_date', 'active',
+            ]);
+        }
+
+        if ($templateId !== null && empty($templateRows)) {
+            $templateRows = $this->read('product.template', [$templateId], [
+                'id', 'name', 'display_name', 'default_code', 'barcode', 'description', 'description_sale',
+                'product_variant_id', 'product_variant_ids', 'create_date', 'write_date', 'active',
+            ]);
+        }
+
+        $templateRecord = $templateRows[0] ?? [];
+        $variantRecord = $variantRows[0] ?? [];
+        if (empty($templateRecord) && empty($variantRecord)) {
             return [];
         }
 
-        $fields = $this->fieldsGet('product.product');
-        $fieldNames = array_keys($fields);
-        ['record' => $record, 'unreadable_fields' => $unreadableFields] = $this->readRecordSafely(
-            'product.product',
-            $productId,
-            $fieldNames,
-        );
+        $translations = $this->inspectProductTranslations($templateId, $variantId, $lang);
+        $customCandidates = $this->inspectCustomNameCandidates($templateId, $variantId);
+        $duplicateDetection = $this->buildDuplicateDetection($variantRecord, $templateRecord);
+        $bestCandidates = $this->buildBestNameCandidates($customCandidates, $translations, $templateRecord, $variantRecord, $duplicateDetection);
 
-        $productTemplate = null;
-        $productTemplateId = $this->extractRelationId($record['product_tmpl_id'] ?? null);
-        $templateNameChecks = [
-            'name' => null,
-            'display_name' => null,
-            'name_es_DO' => null,
-        ];
-
-        if ($productTemplateId !== null) {
-            $templateFields = $this->fieldsGet('product.template');
-            $templateFieldNames = array_keys($templateFields);
-            ['record' => $templateRecord, 'unreadable_fields' => $templateUnreadableFields] = $this->readRecordSafely(
-                'product.template',
-                $productTemplateId,
-                $templateFieldNames,
-            );
-
-            $productTemplate = [
-                'id' => $productTemplateId,
-                'display_name' => is_array($record['product_tmpl_id'] ?? null) ? ($record['product_tmpl_id'][1] ?? null) : null,
-                'fields' => $templateFields,
-                'record' => $templateRecord,
-                'unreadable_fields' => $templateUnreadableFields,
-            ];
-
-            $templateRecordEsDo = $this->readWithContext('product.template', [$productTemplateId], ['name', 'display_name'], ['lang' => 'es_DO'])[0] ?? [];
-            $templateNameChecks = [
-                'name' => $templateRecord['name'] ?? null,
-                'display_name' => $templateRecord['display_name'] ?? ($productTemplate['display_name'] ?? null),
-                'name_es_DO' => $templateRecordEsDo['name'] ?? null,
-            ];
-        }
-
-        $variantRecordEsDo = $this->readWithContext('product.product', [$productId], ['name', 'display_name'], ['lang' => 'es_DO'])[0] ?? [];
-        $inspectionNames = [
-            'template' => $templateNameChecks,
-            'variant' => [
-                'name' => $record['name'] ?? null,
-                'display_name' => $record['display_name'] ?? ($pairs[0][1] ?? null),
-                'display_name_es_DO' => $variantRecordEsDo['display_name'] ?? null,
+        return [
+            'input' => [
+                'product_template_id' => $templateId,
+                'product_product_id' => $variantId,
+                'product_name' => $productName !== '' ? $productName : null,
+                'lang' => $lang !== '' ? $lang : null,
+            ],
+            'resolved_product' => [
+                'product_template_id' => $templateId,
+                'product_product_id' => $variantId,
+            ],
+            'standard_fields' => [
+                'template' => $templateRecord ?: null,
+                'variant' => $variantRecord ?: null,
+            ],
+            'parent_child_relation' => [
+                'variant_name' => $variantRecord['name'] ?? null,
+                'variant_display_name' => $variantRecord['display_name'] ?? null,
+                'template_name_via_variant' => is_array($variantRecord['product_tmpl_id'] ?? null) ? ($variantRecord['product_tmpl_id'][1] ?? null) : null,
+                'template_name' => $templateRecord['name'] ?? null,
+                'template_display_name' => $templateRecord['display_name'] ?? null,
+            ],
+            'translations' => $translations,
+            'custom_field_candidates' => $customCandidates,
+            'constructed_name_hypotheses' => $this->buildConstructedNameHypotheses($templateRecord, $variantRecord),
+            'duplicate_detection' => $duplicateDetection,
+            'best_name_candidates' => $bestCandidates,
+            'recommended_final_name' => $bestCandidates[0] ?? [
+                'value' => null,
+                'source' => 'not_found',
+                'reason' => 'No se encontró evidencia suficiente.',
             ],
         ];
+    }
 
-        $priceCandidates = [];
-        foreach ($fields as $fieldName => $meta) {
-            $label = mb_strtolower((string) ($meta['string'] ?? ''));
-            $name = mb_strtolower((string) $fieldName);
-            $type = (string) ($meta['type'] ?? '');
-            $looksLikePrice = str_contains($name, 'price')
-                || str_contains($name, 'cost')
-                || str_contains($label, 'precio')
-                || str_contains($label, 'price')
-                || str_contains($label, 'costo')
-                || in_array($type, ['monetary', 'float'], true);
+    private function normalizeId(mixed $value): ?int
+    {
+        if (is_int($value) && $value > 0) {
+            return $value;
+        }
+        if (is_numeric($value) && (int) $value > 0) {
+            return (int) $value;
+        }
+        return null;
+    }
 
-            if (!$looksLikePrice || !array_key_exists($fieldName, $record)) {
+    private function inspectProductTranslations(?int $templateId, ?int $variantId, string $lang): array
+    {
+        $rows = [];
+        try {
+            $languages = $lang !== '' ? [$lang] : ['es_DO', 'es_ES', 'en_US'];
+            foreach ($languages as $language) {
+                if ($templateId !== null) {
+                    $tr = $this->readWithContext('product.template', [$templateId], ['name'], ['lang' => $language])[0] ?? [];
+                    if (!empty($tr)) {
+                        $rows[] = [
+                            'source' => 'field_translation_context',
+                            'model_field' => 'product.template,name',
+                            'language' => $language,
+                            'res_id' => $templateId,
+                            'source_text' => null,
+                            'translated_text' => $tr['name'] ?? null,
+                        ];
+                    }
+                }
+                if ($variantId !== null) {
+                    $tr = $this->readWithContext('product.product', [$variantId], ['name'], ['lang' => $language])[0] ?? [];
+                    if (!empty($tr)) {
+                        $rows[] = [
+                            'source' => 'field_translation_context',
+                            'model_field' => 'product.product,name',
+                            'language' => $language,
+                            'res_id' => $variantId,
+                            'source_text' => null,
+                            'translated_text' => $tr['name'] ?? null,
+                        ];
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // Algunas versiones/instancias no permiten contexto de idioma o traducciones.
+        }
+
+        return $rows;
+    }
+
+    private function inspectCustomNameCandidates(?int $templateId, ?int $variantId): array
+    {
+        $patterns = ['name', 'pos', 'short', 'display', 'commercial', 'label', 'title', 'x_', 'x_studio_'];
+        $candidates = [];
+
+        foreach (['product.template' => $templateId, 'product.product' => $variantId] as $model => $id) {
+            if ($id === null) {
                 continue;
             }
 
-            $priceCandidates[$fieldName] = [
-                'label' => $meta['string'] ?? $fieldName,
-                'type' => $type,
-                'value' => $record[$fieldName],
+            $fields = $this->fieldsGet($model);
+            ['record' => $record] = $this->readRecordSafely($model, $id, array_keys($fields));
+
+            foreach ($fields as $fieldName => $meta) {
+                $label = (string) ($meta['string'] ?? '');
+                $haystack = mb_strtolower($fieldName . ' ' . $label);
+                $isCandidate = false;
+                foreach ($patterns as $pattern) {
+                    if (str_contains($haystack, $pattern)) {
+                        $isCandidate = true;
+                        break;
+                    }
+                }
+                if (! $isCandidate) {
+                    continue;
+                }
+
+                $value = $record[$fieldName] ?? null;
+                $confidence = (str_starts_with($fieldName, 'x_') || str_contains($fieldName, 'pos')) ? 'high' : 'medium';
+                $candidates[] = [
+                    'model' => $model,
+                    'field_name' => $fieldName,
+                    'field_label' => $label,
+                    'field_type' => $meta['type'] ?? null,
+                    'value' => $value,
+                    'confidence' => $confidence,
+                    'reason' => 'Campo candidato por patrón de nombre/etiqueta y presencia en el registro.',
+                ];
+            }
+        }
+
+        return $candidates;
+    }
+
+    private function buildConstructedNameHypotheses(array $templateRecord, array $variantRecord): array
+    {
+        $name = (string) ($variantRecord['name'] ?? $templateRecord['name'] ?? '');
+        $defaultCode = (string) ($variantRecord['default_code'] ?? $templateRecord['default_code'] ?? '');
+        $barcode = (string) ($variantRecord['barcode'] ?? $templateRecord['barcode'] ?? '');
+        $descriptionSale = (string) ($variantRecord['description_sale'] ?? $templateRecord['description_sale'] ?? '');
+
+        $hypotheses = [];
+        if ($defaultCode !== '' && $name !== '') {
+            $hypotheses[] = [
+                'hypothesis' => 'default_code + name',
+                'evidence' => sprintf('default_code="%s" y name="%s".', $defaultCode, $name),
+                'confidence' => 'medium',
+            ];
+        }
+        if ($barcode !== '' && $name !== '') {
+            $hypotheses[] = [
+                'hypothesis' => 'barcode + name',
+                'evidence' => sprintf('barcode="%s" y name="%s".', $barcode, $name),
+                'confidence' => 'low',
+            ];
+        }
+        if ($descriptionSale !== '') {
+            $hypotheses[] = [
+                'hypothesis' => 'description_sale como nombre comercial',
+                'evidence' => 'description_sale tiene contenido que podría usarse en POS/frontend.',
+                'confidence' => 'low',
             ];
         }
 
+        return $hypotheses;
+    }
+
+    private function buildDuplicateDetection(array $variantRecord, array $templateRecord): array
+    {
+        $rawName = (string) ($variantRecord['name'] ?? $templateRecord['name'] ?? '');
+        $cleanName = trim((string) preg_replace('/\s*\((copiar|copy)\)\s*$/iu', '', $rawName));
+        $isProbableCopy = $cleanName !== $rawName;
+
+        $relatedProducts = [];
+        if ($cleanName !== '') {
+            $relatedProducts = $this->searchReadWithOrder(
+                'product.product',
+                [['name', 'ilike', $cleanName]],
+                ['id', 'name', 'product_tmpl_id', 'create_date', 'write_date', 'active'],
+                25,
+                'write_date desc, id desc',
+            );
+        }
+
         return [
-            'id' => $productId,
-            'display_name' => $pairs[0][1] ?? null,
-            'fields' => $fields,
-            'record' => $record,
-            'product_template' => $productTemplate,
-            'unreadable_fields' => $unreadableFields,
-            'price_candidates' => $priceCandidates,
-            'inspeccion_names' => $inspectionNames,
+            'raw_name' => $rawName,
+            'clean_name' => $cleanName,
+            'is_probable_copy' => $isProbableCopy,
+            'related_products' => $relatedProducts,
         ];
+    }
+
+    private function buildBestNameCandidates(
+        array $customCandidates,
+        array $translations,
+        array $templateRecord,
+        array $variantRecord,
+        array $duplicateDetection
+    ): array {
+        $candidates = [];
+
+        foreach ($customCandidates as $candidate) {
+            $value = $candidate['value'] ?? null;
+            if (! is_string($value) || trim($value) === '') {
+                continue;
+            }
+            $candidates[] = [
+                'source' => $candidate['model'] . '.' . $candidate['field_name'],
+                'value' => trim($value),
+                'confidence' => $candidate['confidence'] ?? 'medium',
+                'reason' => 'Campo personalizado/candidato con texto no vacío.',
+            ];
+        }
+
+        foreach ($translations as $translation) {
+            $value = $translation['translated_text'] ?? null;
+            if (! is_string($value) || trim($value) === '') {
+                continue;
+            }
+            $candidates[] = [
+                'source' => $translation['model_field'] . '@' . $translation['language'],
+                'value' => trim($value),
+                'confidence' => 'high',
+                'reason' => 'Nombre obtenido por traducción en contexto de idioma.',
+            ];
+        }
+
+        foreach ([
+            'product.template.name' => $templateRecord['name'] ?? null,
+            'product.product.name' => $variantRecord['name'] ?? null,
+        ] as $source => $value) {
+            if (is_string($value) && trim($value) !== '') {
+                $candidates[] = [
+                    'source' => $source,
+                    'value' => trim($value),
+                    'confidence' => 'medium',
+                    'reason' => 'Campo estándar de Odoo.',
+                ];
+            }
+        }
+
+        if (($duplicateDetection['clean_name'] ?? '') !== '') {
+            $candidates[] = [
+                'source' => 'heuristic.cleaned_copy_suffix',
+                'value' => $duplicateDetection['clean_name'],
+                'confidence' => 'low',
+                'reason' => 'Nombre limpiado por heurística de sufijo "(copiar)/(copy)".',
+            ];
+        }
+
+        usort($candidates, function (array $a, array $b): int {
+            $order = ['high' => 0, 'medium' => 1, 'low' => 2];
+            return ($order[$a['confidence']] ?? 9) <=> ($order[$b['confidence']] ?? 9);
+        });
+
+        return array_values($candidates);
     }
 
     private function extractRelationId(mixed $value): ?int
