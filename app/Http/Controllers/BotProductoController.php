@@ -198,20 +198,31 @@ class BotProductoController extends Controller
 
     public function inspeccionar(Request $request)
     {
-        $nombre = trim($request->query('nombre', ''));
+        $input = [
+            'product_template_id' => $request->query('product_template_id'),
+            'product_product_id' => $request->query('product_product_id'),
+            'product_name' => trim((string) ($request->query('product_name', $request->query('nombre', '')))),
+            'lang' => trim((string) $request->query('lang', '')),
+        ];
 
-        if ($nombre === '') {
-            return response()->json(['error' => 'Falta el parámetro "nombre"'], 400);
+        $hasTemplateId = is_numeric($input['product_template_id']);
+        $hasProductId = is_numeric($input['product_product_id']);
+        $hasProductName = $input['product_name'] !== '';
+
+        if (! $hasTemplateId && ! $hasProductId && ! $hasProductName) {
+            return response()->json([
+                'error' => 'Debes enviar al menos uno: product_template_id, product_product_id o product_name.',
+            ], 400);
         }
 
         try {
             $odoo = OdooXmlRpc::fromEnv();
-            $inspeccion = $odoo->inspectProductByName($nombre);
+            $inspeccion = $odoo->inspectProductNameSources($input);
 
             if (empty($inspeccion)) {
                 return response()->json([
                     'message' => 'No se encontró producto para inspeccionar.',
-                    'query' => $nombre,
+                    'input' => $input,
                 ], 404);
             }
 
