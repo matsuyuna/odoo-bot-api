@@ -1477,6 +1477,11 @@ class OdooXmlRpc
 
         $productTemplate = null;
         $productTemplateId = $this->extractRelationId($record['product_tmpl_id'] ?? null);
+        $templateNameChecks = [
+            'name' => null,
+            'display_name' => null,
+            'name_es_DO' => null,
+        ];
 
         if ($productTemplateId !== null) {
             $templateFields = $this->fieldsGet('product.template');
@@ -1494,7 +1499,24 @@ class OdooXmlRpc
                 'record' => $templateRecord,
                 'unreadable_fields' => $templateUnreadableFields,
             ];
+
+            $templateRecordEsDo = $this->readWithContext('product.template', [$productTemplateId], ['name', 'display_name'], ['lang' => 'es_DO'])[0] ?? [];
+            $templateNameChecks = [
+                'name' => $templateRecord['name'] ?? null,
+                'display_name' => $templateRecord['display_name'] ?? ($productTemplate['display_name'] ?? null),
+                'name_es_DO' => $templateRecordEsDo['name'] ?? null,
+            ];
         }
+
+        $variantRecordEsDo = $this->readWithContext('product.product', [$productId], ['name', 'display_name'], ['lang' => 'es_DO'])[0] ?? [];
+        $inspectionNames = [
+            'template' => $templateNameChecks,
+            'variant' => [
+                'name' => $record['name'] ?? null,
+                'display_name' => $record['display_name'] ?? ($pairs[0][1] ?? null),
+                'display_name_es_DO' => $variantRecordEsDo['display_name'] ?? null,
+            ],
+        ];
 
         $priceCandidates = [];
         foreach ($fields as $fieldName => $meta) {
@@ -1527,6 +1549,7 @@ class OdooXmlRpc
             'product_template' => $productTemplate,
             'unreadable_fields' => $unreadableFields,
             'price_candidates' => $priceCandidates,
+            'inspeccion_names' => $inspectionNames,
         ];
     }
 
