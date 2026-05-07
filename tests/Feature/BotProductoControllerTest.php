@@ -111,7 +111,7 @@ class BotProductoControllerTest extends TestCase
         $response
             ->assertOk()
             ->assertJsonCount(1)
-            ->assertJsonPath('availability_text', "- Acetaminofen 500mg Sí hay disponible Precio 8.516 bs\n\n- Acetaminofen Infantil Sí hay disponible Precio 5.306 bs");
+            ->assertJsonPath('availability_text', "- Acetaminofen 500mg Sí hay disponible Precio 888,88 bs\n\n- Acetaminofen Infantil Sí hay disponible Precio 555,55 bs");
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/api/v1/updateContactAttributes/584001112233')
@@ -136,7 +136,9 @@ class BotProductoControllerTest extends TestCase
             ->assertJsonCount(2)
             ->assertJsonPath('0.name', 'Acetaminofen 500mg')
             ->assertJsonPath('0.default_code', 'ACE500')
-            ->assertJsonPath('1.name', 'Acetaminofen Infantil');
+            ->assertJsonPath('0.price_with_tax_today_rate', 888.88)
+            ->assertJsonPath('1.name', 'Acetaminofen Infantil')
+            ->assertJsonPath('1.price_with_tax_today_rate', 555.55);
     }
 
     public function test_buscar_objcompleto_excluye_productos_con_copiar_en_nombre_sin_importar_formato(): void
@@ -582,6 +584,7 @@ XML;
                 <member><name>default_code</name><value><string>ACE500</string></value></member>
                 <member><name>qty_available</name><value><double>11</double></value></member>
                 <member><name>lst_price</name><value><double>19.9</double></value></member>
+                <member><name>price_with_tax_today_rate</name><value><double>888.88</double></value></member>
                 <member><name>barcode</name><value><string>12345</string></value></member>
               </struct>
             </value>
@@ -592,6 +595,7 @@ XML;
                 <member><name>default_code</name><value><string>ACEINF</string></value></member>
                 <member><name>qty_available</name><value><double>4</double></value></member>
                 <member><name>lst_price</name><value><double>12.4</double></value></member>
+                <member><name>price_with_tax_today_rate</name><value><double>555.55</double></value></member>
                 <member><name>barcode</name><value><string>67890</string></value></member>
               </struct>
             </value>
