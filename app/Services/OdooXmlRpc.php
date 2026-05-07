@@ -141,7 +141,13 @@ class OdooXmlRpc
 
         // read para traer campos
         $rows = $this->read('product.product', $idsFinal, [
-            'id', 'name', 'default_code', 'qty_available', 'barcode', 'lst_price'
+            'id',
+            'name',
+            'default_code',
+            'qty_available',
+            'barcode',
+            'lst_price',
+            'price_with_tax_today_rate',
         ]);
         Log::debug('searchProductsSmart.debug_rows_after_read', [
             'query' => $query,
@@ -253,6 +259,7 @@ class OdooXmlRpc
                 'barcode' => $r['barcode'] ?? null,
                 'qty_available' => $qtyAvailable,
                 'price' => $r['lst_price'] ?? 0,
+                'price_with_tax_today_rate' => $r['price_with_tax_today_rate'] ?? null,
             ];
             Log::debug('searchProductsSmart.debug_out_loop', [
                 'query' => $query,

@@ -28,6 +28,9 @@ class BotProductoController extends Controller
             $respuesta = array_map(function (array $producto) use ($latestRates) {
                 $qtyAvailable = (float) ($producto['qty_available'] ?? 0);
                 $price = (float) ($producto['price'] ?? 0);
+                $priceWithTaxTodayRate = is_null($producto['price_with_tax_today_rate'] ?? null)
+                    ? null
+                    : (float) $producto['price_with_tax_today_rate'];
 
                 $precioResCurrencyRate = is_null($latestRates['res_currency_rate'])
                     ? null
@@ -50,6 +53,7 @@ class BotProductoController extends Controller
                     'barcode' => $producto['barcode'] ?? null,
                     'qty_available' => $qtyAvailable,
                     'price' => $price,
+                    'price_with_tax_today_rate' => $priceWithTaxTodayRate,
                     'precio_res_currency_rate' => $precioResCurrencyRate,
                     'precio_res_currency' => $precioResCurrency,
                     'availability_text_res_currency_rate' => sprintf(
@@ -94,6 +98,9 @@ class BotProductoController extends Controller
             $respuesta = array_map(function (array $producto) use ($latestRates) {
                 $qtyAvailable = (float) ($producto['qty_available'] ?? 0);
                 $price = (float) ($producto['price'] ?? 0);
+                $priceWithTaxTodayRate = is_null($producto['price_with_tax_today_rate'] ?? null)
+                    ? null
+                    : (float) $producto['price_with_tax_today_rate'];
 
                 $precioResCurrencyRate = is_null($latestRates['res_currency_rate'])
                     ? null
@@ -102,9 +109,9 @@ class BotProductoController extends Controller
                     ? null
                     : round($price * (float) $latestRates['res_currency'], 2);
 
-                $precioResCurrencyRateTexto = is_null($precioResCurrencyRate)
+                $precioResCurrencyRateTexto = is_null($priceWithTaxTodayRate)
                     ? 'No disponible'
-                    : number_format($precioResCurrencyRate, 2, ',', '.') . ' bs';
+                    : number_format($priceWithTaxTodayRate, 2, ',', '.') . ' bs';
                 $precioResCurrencyTexto = is_null($precioResCurrency)
                     ? 'No disponible'
                     : number_format((float) round($precioResCurrency), 0, ',', '.') . ' bs';
@@ -116,6 +123,7 @@ class BotProductoController extends Controller
                     'barcode' => $producto['barcode'] ?? null,
                     'qty_available' => $qtyAvailable,
                     'price' => $price,
+                    'price_with_tax_today_rate' => $priceWithTaxTodayRate,
                     'precio_res_currency_rate' => $precioResCurrencyRate,
                     'precio_res_currency' => $precioResCurrency,
                     'availability_text_res_currency_rate' => sprintf(
@@ -136,7 +144,7 @@ class BotProductoController extends Controller
             $this->actualizarProductosEnWati($request, $respuesta);
 
             $availabilityTexts = array_values(array_filter(array_map(
-                fn (array $producto) => str_replace(' - ', ' ', trim((string) ($producto['availability_text_res_currency'] ?? ''))),
+                fn (array $producto) => str_replace(' - ', ' ', trim((string) ($producto['availability_text_res_currency_rate'] ?? ''))),
                 $respuesta
             )));
 
